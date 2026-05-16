@@ -1,0 +1,9 @@
+.DS_Store
+.venv/
+__pycache__/
+*.pyc
+.idea/
+.vscode/
+
+# Assembled PMTiles is rebuilt from tiles/*.part-* by scripts/assemble-tiles.sh
+tiles/nyc-metro.pmtiles

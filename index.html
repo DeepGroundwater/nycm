@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>NYC Metro Basemap</title>
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" />
+<style>
+  html, body, #map { margin: 0; height: 100%; width: 100%; }
+  body { background: #111; }
+</style>
+</head>
+<body>
+<div id="map"></div>
+<script type="importmap">
+{
+  "imports": {
+    "maplibre-gl": "https://esm.sh/maplibre-gl@4.7.1",
+    "pmtiles": "https://esm.sh/pmtiles@3.0.7",
+    "protomaps-themes-base": "https://esm.sh/protomaps-themes-base@4.5.0"
+  }
+}
+</script>
+<script type="module">
+  import maplibregl from "maplibre-gl";
+  import * as pmtiles from "pmtiles";
+  import layers from "protomaps-themes-base";
+
+  const protocol = new pmtiles.Protocol();
+  maplibregl.addProtocol("pmtiles", protocol.tile);
+
+  const TILES_URL = "pmtiles://tiles/nyc-metro.pmtiles";
+  const THEME = "light"; // light | dark | white | grayscale | black
+
+  const map = new maplibregl.Map({
+    container: "map",
+    center: [-73.95, 40.73],
+    zoom: 10,
+    minZoom: 8,
+    maxZoom: 16,
+    maxBounds: [[-74.45, 40.40], [-71.70, 41.30]],
+    style: {
+      version: 8,
+      glyphs: "https://protomaps.github.io/basemaps-assets/fonts/{fontstack}/{range}.pbf",
+      sprite: "https://protomaps.github.io/basemaps-assets/sprites/v4/light",
+      sources: {
+        protomaps: {
+          type: "vector",
+          url: TILES_URL,
+          attribution: '<a href="https://protomaps.com">Protomaps</a> &copy; <a href="https://openstreetmap.org">OpenStreetMap</a>'
+        }
+      },
+      layers: layers("protomaps", THEME, "en")
+    }
+  });
+
+  map.addControl(new maplibregl.NavigationControl(), "top-right");
+  map.addControl(new maplibregl.ScaleControl({ unit: "imperial" }), "bottom-left");
+
+  // surface any style/tile errors in the console so we can debug fast
+  map.on("error", e => console.error("[maplibre]", e && e.error ? e.error : e));
+
+  // Overlay slot for hydrology data:
+  // map.on("load", () => {
+  //   map.addSource("nhd-flowlines", { type: "geojson", data: "data/nhd-flowlines.geojson" });
+  //   map.addLayer({ id: "nhd-flowlines", type: "line", source: "nhd-flowlines",
+  //                  paint: { "line-color": "#3a7bd5", "line-width": 1 } });
+  // });
+</script>
+</body>
+</html>
