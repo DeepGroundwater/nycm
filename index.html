@@ -3,69 +3,1165 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>NYC Metro Basemap</title>
+<title>NYC Metro · DeepGroundwater</title>
 <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" />
 <style>
-  html, body, #map { margin: 0; height: 100%; width: 100%; }
-  body { background: #111; }
+  :root {
+    --earth: #faf3e1;
+    --ink: #264653;
+    --muted: #4a5566;
+    --chip-bg: rgba(255, 251, 240, 0.94);
+    --chip-border: rgba(38, 70, 83, 0.12);
+  }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: var(--earth);
+    color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    transition: background 400ms ease, color 400ms ease;
+  }
+  #map { position: absolute; inset: 0; opacity: 0; transition: opacity 400ms ease, filter 600ms ease; }
+  #map.loaded { opacity: 1; }
+  #map.cloudy { filter: saturate(0.78) brightness(0.97) contrast(0.97); }
+
+  .brand {
+    position: absolute; top: 16px; left: 16px; z-index: 1;
+    padding: 12px 14px 14px;
+    background: var(--chip-bg);
+    border: 1px solid var(--chip-border);
+    border-radius: 12px;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 8px 24px rgba(15, 23, 42, 0.06);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    color: var(--ink);
+    user-select: none;
+    min-width: 232px;
+    transition: background 400ms ease, border-color 400ms ease, color 400ms ease;
+  }
+  .brand .title { font-size: 14px; font-weight: 600; line-height: 1.25; letter-spacing: -0.01em; }
+  .brand .sub {
+    display: block; margin-top: 2px;
+    font-size: 10.5px; font-weight: 500; color: var(--muted);
+    text-transform: uppercase; letter-spacing: 0.1em;
+  }
+  .divider { height: 1px; background: var(--chip-border); margin: 10px 0; }
+  .phase-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 12px; }
+  .phase-row .phase { font-weight: 600; letter-spacing: -0.005em; }
+  .phase-row .time { color: var(--muted); font-variant-numeric: tabular-nums; }
+  .phase-row .cloud-tag {
+    font-size: 9.5px; font-weight: 600; letter-spacing: 0.08em;
+    text-transform: uppercase; color: var(--muted);
+    padding: 2px 6px; border: 1px solid var(--chip-border); border-radius: 999px;
+    margin-left: 6px;
+  }
+  .auto-btn {
+    margin-top: 8px;
+    display: inline-flex; align-items: center; gap: 5px;
+    font: inherit; font-size: 10.5px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.1em;
+    padding: 4px 10px; border-radius: 999px;
+    border: 1px solid var(--chip-border); background: transparent; color: var(--muted);
+    cursor: pointer; transition: all 160ms ease;
+  }
+  .auto-btn::before {
+    content: ""; width: 6px; height: 6px; border-radius: 50%;
+    background: var(--muted); transition: background 160ms ease;
+  }
+  .auto-btn.active { background: var(--ink); color: var(--earth); border-color: var(--ink); }
+  .auto-btn.active::before { background: var(--earth); animation: pulse 2s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity: 0.35; } }
+
+  .toggles { margin-top: 10px; display: flex; gap: 6px; flex-wrap: wrap; }
+  .toggle {
+    font: inherit; font-size: 10.5px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.08em;
+    padding: 4px 9px; border-radius: 999px;
+    border: 1px solid var(--chip-border); background: transparent; color: var(--muted);
+    cursor: pointer; transition: all 160ms ease;
+    display: inline-flex; align-items: center; gap: 5px;
+  }
+  .toggle::before {
+    content: ""; width: 7px; height: 7px; border-radius: 50%;
+    background: var(--dot, currentColor);
+    box-shadow: 0 0 0 1.5px var(--chip-bg);
+  }
+  .toggle.on { background: var(--ink); color: var(--earth); border-color: var(--ink); }
+  .toggle.loading::before { animation: pulse 1.2s ease-in-out infinite; }
+  .live-status {
+    margin-top: 6px; font-size: 10.5px; font-weight: 600;
+    color: var(--muted); font-variant-numeric: tabular-nums; letter-spacing: 0.02em;
+  }
+
+  .swatches { margin-top: 8px; display: flex; gap: 4px; }
+  .swatch {
+    width: 16px; height: 16px; padding: 0; background: var(--hero);
+    border: 1.5px solid rgba(15, 23, 42, 0.18); border-radius: 50%;
+    cursor: pointer; outline: none;
+    transition: transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease;
+  }
+  .swatch:hover { transform: scale(1.18); }
+  .swatch:focus-visible { box-shadow: 0 0 0 3px rgba(15, 23, 42, 0.22); }
+  .swatch.active {
+    border-color: var(--ink);
+    box-shadow: 0 0 0 1.5px var(--chip-bg), 0 0 0 3px var(--ink);
+  }
+
+  .maplibregl-ctrl-attrib { font-size: 10px; }
+  .maplibregl-ctrl-bottom-right .maplibregl-ctrl { margin: 0 8px 8px 0; }
+  .maplibregl-ctrl-top-right .maplibregl-ctrl { margin: 16px 16px 0 0; }
+  .maplibregl-ctrl-bottom-left .maplibregl-ctrl { margin: 0 0 12px 16px; }
 </style>
 </head>
 <body>
+<div class="brand" id="brand">
+  <div class="title">NYC Metro<span class="sub">DeepGroundwater</span></div>
+  <div class="divider"></div>
+  <div class="phase-row">
+    <span><span class="phase" id="phaseName">…</span><span class="cloud-tag" id="cloudTag" hidden>cloudy</span></span>
+    <span class="time" id="phaseTime">—</span>
+  </div>
+  <button class="auto-btn active" id="autoBtn" aria-pressed="true">Auto</button>
+  <div class="swatches" id="swatches" role="tablist" aria-label="Time-of-day theme"></div>
+  <div class="toggles" role="group" aria-label="Live transit overlays">
+    <button class="toggle" id="toggleSubway" style="--dot:#0039A6" aria-pressed="false">Subway</button>
+    <button class="toggle" id="toggleRail"   style="--dot:#00985F" aria-pressed="false">Rail</button>
+  </div>
+  <div class="live-status" id="liveStatus" hidden>—</div>
+</div>
 <div id="map"></div>
 <script type="importmap">
 {
   "imports": {
     "maplibre-gl": "https://esm.sh/maplibre-gl@4.7.1",
     "pmtiles": "https://esm.sh/pmtiles@3.0.7",
-    "protomaps-themes-base": "https://esm.sh/protomaps-themes-base@4.5.0"
+    "protomaps-themes-base": "https://esm.sh/protomaps-themes-base@4.5.0",
+    "protobufjs": "https://esm.sh/protobufjs@7.4.0"
   }
 }
 </script>
 <script type="module">
   import maplibregl from "maplibre-gl";
   import * as pmtiles from "pmtiles";
-  import layers from "protomaps-themes-base";
+  import { layersWithPartialCustomTheme } from "protomaps-themes-base";
+  import protobuf from "protobufjs";
 
   const protocol = new pmtiles.Protocol();
   maplibregl.addProtocol("pmtiles", protocol.tile);
 
-  const TILES_URL = "pmtiles://tiles/nyc-metro.pmtiles";
-  const THEME = "light"; // light | dark | white | grayscale | black
+  // Minimal GTFS-RT proto with NYC extensions inlined. Replaces the
+  // gtfs-realtime-bindings library so we can read nyct.is_assigned,
+  // nyct.scheduled_track / actual_track, and the base spec's
+  // schedule_relationship + direction_id — none of which the upstream
+  // bindings expose (extensions get dropped by the prebuilt schema).
+  const NYCT_PROTO = `
+    syntax = "proto2";
+    package transit_realtime;
+    message FeedMessage {
+      required FeedHeader header = 1;
+      repeated FeedEntity entity = 2;
+    }
+    message FeedHeader {
+      required string gtfs_realtime_version = 1;
+      optional uint64 timestamp = 3;
+    }
+    message FeedEntity {
+      required string id = 1;
+      optional bool is_deleted = 2 [default = false];
+      optional TripUpdate trip_update = 3;
+    }
+    message TripUpdate {
+      required TripDescriptor trip = 1;
+      repeated StopTimeUpdate stop_time_update = 2;
+    }
+    message TripDescriptor {
+      optional string trip_id = 1;
+      optional string route_id = 5;
+      optional uint32 direction_id = 6;
+      optional string start_date = 3;
+      enum ScheduleRelationship { SCHEDULED = 0; ADDED = 1; UNSCHEDULED = 2; CANCELED = 3; REPLACEMENT = 5; DUPLICATED = 6; }
+      optional ScheduleRelationship schedule_relationship = 4 [default = SCHEDULED];
+      optional NyctTripDescriptor nyct_trip_descriptor = 1001;
+    }
+    message StopTimeUpdate {
+      optional uint32 stop_sequence = 1;
+      optional string stop_id = 4;
+      optional StopTimeEvent arrival = 2;
+      optional StopTimeEvent departure = 3;
+      optional NyctStopTimeUpdate nyct_stop_time_update = 1001;
+    }
+    message StopTimeEvent {
+      optional int32 delay = 1;
+      optional int64 time = 2;
+    }
+    message NyctTripDescriptor {
+      optional string train_id = 1;
+      optional bool is_assigned = 2;
+      enum Direction { NORTH = 1; EAST = 2; SOUTH = 3; WEST = 4; }
+      optional Direction direction = 3;
+    }
+    message NyctStopTimeUpdate {
+      optional string scheduled_track = 1;
+      optional string actual_track = 2;
+    }`;
+  const FEED_MESSAGE = protobuf.parse(NYCT_PROTO).root.lookupType("transit_realtime.FeedMessage");
+
+  const GLYPHS = "https://protomaps.github.io/basemaps-assets/fonts/{fontstack}/{range}.pbf";
+  const SPRITE_LIGHT = "https://protomaps.github.io/basemaps-assets/sprites/v4/light";
+  const SPRITE_DARK  = "https://protomaps.github.io/basemaps-assets/sprites/v4/dark";
+  const TILES  = "pmtiles://tiles/nyc-metro.pmtiles";
+  const ATTRIB = '<a href="https://protomaps.com">Protomaps</a> &copy; <a href="https://openstreetmap.org">OpenStreetMap</a>';
+
+  // ---- Theme builder --------------------------------------------------------
+  // Shared shape so each phase only specifies the palette, not every key.
+  function makeTheme(c) {
+    return {
+      background: c.earth, earth: c.earth, water: c.water,
+      park_a: c.park, park_b: c.park, wood_a: c.wood, wood_b: c.wood,
+      scrub_a: c.park, scrub_b: c.park,
+      beach: c.sand, sand: c.sand, pedestrian: c.park,
+      buildings: c.building, pier: c.park,
+      aerodrome: c.building, runway: c.wood,
+      hospital: c.building, industrial: c.building, school: c.building,
+      zoo: c.park, military: c.building, glacier: "#ffffff",
+
+      other: c.road_minor, minor_service: c.road_minor, minor_service_casing: c.road_minor_casing,
+      minor_a: c.road_minor, minor_b: c.road_minor, minor_casing: c.road_minor_casing,
+      link: c.road_major, link_casing: c.road_major_casing,
+      major: c.road_major, major_casing_early: c.road_major_casing, major_casing_late: c.road_major_casing,
+      highway: c.road_highway, highway_casing_early: c.road_highway_casing, highway_casing_late: c.road_highway_casing,
+      bridges_other: c.road_minor, bridges_other_casing: c.road_minor_casing,
+      bridges_minor: c.road_minor, bridges_minor_casing: c.road_minor_casing,
+      bridges_link: c.road_major, bridges_link_casing: c.road_major_casing,
+      bridges_major: c.road_major, bridges_major_casing: c.road_major_casing,
+      bridges_highway: c.road_highway, bridges_highway_casing: c.road_highway_casing,
+      tunnel_other: c.road_minor, tunnel_other_casing: c.road_minor_casing,
+      tunnel_minor: c.road_minor, tunnel_minor_casing: c.road_minor_casing,
+      tunnel_link: c.road_major, tunnel_link_casing: c.road_major_casing,
+      tunnel_major: c.road_major, tunnel_major_casing: c.road_major_casing,
+      tunnel_highway: c.road_highway, tunnel_highway_casing: c.road_highway_casing,
+
+      railway: c.railway, boundaries: c.boundary,
+      ocean_label: c.waterLabel, waterway_label: c.waterLabel, peak_label: c.ink,
+      city_label: c.ink, city_label_halo: c.halo,
+      state_label: c.ink, state_label_halo: c.halo,
+      country_label: c.ink,
+      subplace_label: c.ink, subplace_label_halo: c.halo,
+      address_label: c.muted, address_label_halo: c.halo,
+      roads_label_minor: c.muted, roads_label_minor_halo: c.halo,
+      roads_label_major: c.ink, roads_label_major_halo: c.halo,
+    };
+  }
+
+  // ---- 6 time-of-day themes -------------------------------------------------
+  // Luminosity ramp: dawn (pale) → morning (cool light) → afternoon (warm bright)
+  // → evening (golden) → dusk (deep purple) → night (near-black).
+  const themes = {
+    dawn: {
+      name: "Dawn", base: "light", sprite: SPRITE_LIGHT,
+      chrome: { earth: "#f2e9e4", ink: "#22223b", muted: "#6c5b7b", chipBg: "rgba(242,233,228,0.95)", chipBorder: "rgba(34,34,59,0.14)" },
+      theme: makeTheme({
+        earth: "#f2e9e4", water: "#4a4e69", building: "#e9dfd8",
+        park: "#cabbb5", wood: "#a89691", sand: "#e8d4c8",
+        road_minor: "#ffffff", road_minor_casing: "#d9c8c2",
+        road_major: "#c9ada7", road_major_casing: "#9a8c98",
+        road_highway: "#9a8c98", road_highway_casing: "#4a4e69",
+        railway: "#a89691", boundary: "#9a8c98",
+        waterLabel: "#f2e9e4", ink: "#22223b", muted: "#6c5b7b", halo: "#f2e9e4",
+      }),
+    },
+    morning: {
+      name: "Morning", base: "light", sprite: SPRITE_LIGHT,
+      chrome: { earth: "#f1faee", ink: "#1d3557", muted: "#457b9d", chipBg: "rgba(241,250,238,0.96)", chipBorder: "rgba(29,53,87,0.14)" },
+      theme: makeTheme({
+        earth: "#f1faee", water: "#457b9d", building: "#e0e8d6",
+        park: "#9fcfa4", wood: "#6fa878", sand: "#f5e6c0",
+        road_minor: "#ffffff", road_minor_casing: "#dde4d2",
+        road_major: "#a8dadc", road_major_casing: "#457b9d",
+        road_highway: "#e63946", road_highway_casing: "#a52838",
+        railway: "#8a96a8", boundary: "#e63946",
+        waterLabel: "#f1faee", ink: "#1d3557", muted: "#457b9d", halo: "#f1faee",
+      }),
+    },
+    afternoon: {
+      name: "Afternoon", base: "light", sprite: SPRITE_LIGHT,
+      chrome: { earth: "#fff8d4", ink: "#001d3d", muted: "#003566", chipBg: "rgba(255,248,212,0.96)", chipBorder: "rgba(0,29,61,0.16)" },
+      theme: makeTheme({
+        earth: "#fff8d4", water: "#003566", building: "#f5e8b0",
+        park: "#d4dc7a", wood: "#9fb060", sand: "#ffd60a",
+        road_minor: "#ffffff", road_minor_casing: "#ecdb98",
+        road_major: "#ffd60a", road_major_casing: "#ffc300",
+        road_highway: "#ffc300", road_highway_casing: "#001d3d",
+        railway: "#9a8530", boundary: "#ffc300",
+        waterLabel: "#ffd60a", ink: "#001d3d", muted: "#003566", halo: "#fff8d4",
+      }),
+    },
+    evening: {
+      name: "Evening", base: "light", sprite: SPRITE_LIGHT,
+      chrome: { earth: "#ffe8c4", ink: "#023047", muted: "#fb8500", chipBg: "rgba(255,232,196,0.95)", chipBorder: "rgba(2,48,71,0.16)" },
+      theme: makeTheme({
+        earth: "#ffe8c4", water: "#023047", building: "#f0d4a3",
+        park: "#c4ad6f", wood: "#9a8543", sand: "#ffb703",
+        road_minor: "#fff5d8", road_minor_casing: "#e8c473",
+        road_major: "#ffb703", road_major_casing: "#fb8500",
+        road_highway: "#fb8500", road_highway_casing: "#023047",
+        railway: "#8a6a2a", boundary: "#fb8500",
+        waterLabel: "#8ecae6", ink: "#023047", muted: "#fb8500", halo: "#ffe8c4",
+      }),
+    },
+    dusk: {
+      name: "Dusk", base: "dark", sprite: SPRITE_DARK,
+      chrome: { earth: "#240046", ink: "#e0aaff", muted: "#c77dff", chipBg: "rgba(16,0,43,0.88)", chipBorder: "rgba(224,170,255,0.24)" },
+      theme: makeTheme({
+        earth: "#240046", water: "#480ca8", building: "#2a0a52",
+        park: "#3c096c", wood: "#2e0552", sand: "#9d4edd",
+        road_minor: "#5a189a", road_minor_casing: "#3c096c",
+        road_major: "#9d4edd", road_major_casing: "#7b2cbf",
+        road_highway: "#c77dff", road_highway_casing: "#9d4edd",
+        railway: "#8a5cb8", boundary: "#f72585",
+        waterLabel: "#e0aaff", ink: "#e0aaff", muted: "#c77dff", halo: "#10002b",
+      }),
+    },
+    night: {
+      name: "Night", base: "dark", sprite: SPRITE_DARK,
+      // Darkest theme — earth near-black, water a deep navy that reads as moonlit.
+      chrome: { earth: "#000814", ink: "#caf0f8", muted: "#48cae4", chipBg: "rgba(0,8,20,0.92)", chipBorder: "rgba(72,202,228,0.22)" },
+      theme: makeTheme({
+        earth: "#000814", water: "#003566", building: "#08152e",
+        park: "#06122a", wood: "#091a36", sand: "#0a2540",
+        road_minor: "#16304d", road_minor_casing: "#0a1d35",
+        road_major: "#1d3a5c", road_major_casing: "#0a1d35",
+        road_highway: "#0077b6", road_highway_casing: "#003566",
+        railway: "#3a4a6a", boundary: "#0096c7",
+        waterLabel: "#90e0ef", ink: "#caf0f8", muted: "#48cae4", halo: "#000814",
+      }),
+    },
+  };
+
+  // ---- Time-of-day → phase --------------------------------------------------
+  // Buckets in NYC local time. Index = first phase whose `from` is <= current hour.
+  const BUCKETS = [
+    { from: 0,  phase: "night" },
+    { from: 5,  phase: "dawn" },
+    { from: 7,  phase: "morning" },
+    { from: 12, phase: "afternoon" },
+    { from: 17, phase: "evening" },
+    { from: 20, phase: "dusk" },
+    { from: 22, phase: "night" },
+  ];
+
+  function nycHour() {
+    return parseInt(new Intl.DateTimeFormat("en-US", {
+      hour: "numeric", hour12: false, timeZone: "America/New_York",
+    }).format(new Date()));
+  }
+  function nycTimeStr() {
+    return new Intl.DateTimeFormat("en-US", {
+      hour: "numeric", minute: "2-digit", timeZone: "America/New_York",
+    }).format(new Date());
+  }
+  function phaseForNow() {
+    const h = nycHour();
+    let p = BUCKETS[0].phase;
+    for (const b of BUCKETS) if (h >= b.from) p = b.phase;
+    return p;
+  }
+
+  // ---- Style / chrome / state ----------------------------------------------
+  function buildStyle(key) {
+    const t = themes[key];
+    return {
+      version: 8,
+      glyphs: GLYPHS,
+      sprite: t.sprite,
+      sources: { protomaps: { type: "vector", url: TILES, attribution: ATTRIB } },
+      layers: layersWithPartialCustomTheme("protomaps", t.base, t.theme, "en"),
+    };
+  }
+  function applyChrome(key) {
+    const c = themes[key].chrome;
+    const r = document.documentElement.style;
+    r.setProperty("--earth", c.earth);
+    r.setProperty("--ink", c.ink);
+    r.setProperty("--muted", c.muted);
+    r.setProperty("--chip-bg", c.chipBg);
+    r.setProperty("--chip-border", c.chipBorder);
+  }
+
+  let mode = localStorage.getItem("nycm-mode") || "auto";
+  let active = mode === "auto"
+    ? phaseForNow()
+    : (themes[localStorage.getItem("nycm-theme")] ? localStorage.getItem("nycm-theme") : phaseForNow());
+
+  function setActiveSwatch(key) {
+    document.querySelectorAll(".swatch").forEach(el => {
+      el.classList.toggle("active", el.dataset.theme === key);
+    });
+    const t = themes[key];
+    document.getElementById("phaseName").textContent = t.name;
+  }
+  function setAutoUI(on) {
+    const b = document.getElementById("autoBtn");
+    b.classList.toggle("active", on);
+    b.setAttribute("aria-pressed", String(on));
+  }
+  function applyTheme(key, { manual = true } = {}) {
+    active = key;
+    applyChrome(key);
+    setActiveSwatch(key);
+    map.setStyle(buildStyle(key), { diff: true });
+    if (manual) {
+      mode = "manual";
+      localStorage.setItem("nycm-mode", "manual");
+      localStorage.setItem("nycm-theme", key);
+      setAutoUI(false);
+    }
+  }
+  function enableAuto() {
+    mode = "auto";
+    localStorage.setItem("nycm-mode", "auto");
+    setAutoUI(true);
+    const p = phaseForNow();
+    if (p !== active) applyTheme(p, { manual: false });
+  }
+
+  // ---- Cloud cover (open-meteo) --------------------------------------------
+  async function updateCloud() {
+    try {
+      const r = await fetch("https://api.open-meteo.com/v1/forecast?latitude=40.73&longitude=-73.95&current=cloud_cover&timezone=America%2FNew_York", { cache: "no-cache" });
+      if (!r.ok) return;
+      const d = await r.json();
+      const cover = d?.current?.cloud_cover ?? 0;
+      const cloudy = cover >= 60;
+      document.getElementById("map").classList.toggle("cloudy", cloudy);
+      const tag = document.getElementById("cloudTag");
+      tag.hidden = !cloudy;
+      tag.textContent = cloudy ? `cloudy · ${cover}%` : "";
+    } catch (_) { /* ignore */ }
+  }
+
+  // ---- Render swatches ------------------------------------------------------
+  const order = ["dawn","morning","afternoon","evening","dusk","night"];
+  const sw = document.getElementById("swatches");
+  for (const key of order) {
+    const t = themes[key];
+    const hero = t.theme.water;
+    const b = document.createElement("button");
+    b.className = "swatch";
+    b.dataset.theme = key;
+    b.style.setProperty("--hero", hero);
+    b.setAttribute("aria-label", t.name);
+    b.title = t.name;
+    b.addEventListener("click", () => applyTheme(key, { manual: true }));
+    sw.appendChild(b);
+  }
+  document.getElementById("autoBtn").addEventListener("click", enableAuto);
+
+  // ---- Map init -------------------------------------------------------------
+  applyChrome(active);
+  setActiveSwatch(active);
+  setAutoUI(mode === "auto");
+  document.getElementById("phaseTime").textContent = nycTimeStr();
 
   const map = new maplibregl.Map({
     container: "map",
-    center: [-73.95, 40.73],
-    zoom: 10,
+    center: [-73.4, 40.85],
+    zoom: 9,
     minZoom: 8,
     maxZoom: 16,
     maxBounds: [[-74.45, 40.40], [-71.70, 41.30]],
-    style: {
-      version: 8,
-      glyphs: "https://protomaps.github.io/basemaps-assets/fonts/{fontstack}/{range}.pbf",
-      sprite: "https://protomaps.github.io/basemaps-assets/sprites/v4/light",
-      sources: {
-        protomaps: {
-          type: "vector",
-          url: TILES_URL,
-          attribution: '<a href="https://protomaps.com">Protomaps</a> &copy; <a href="https://openstreetmap.org">OpenStreetMap</a>'
+    style: buildStyle(active),
+  });
+
+  map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), "top-right");
+  map.addControl(new maplibregl.GeolocateControl({
+    positionOptions: { enableHighAccuracy: true },
+    trackUserLocation: false,
+    showAccuracyCircle: true,
+  }), "top-right");
+  map.addControl(new maplibregl.ScaleControl({ unit: "imperial", maxWidth: 120 }), "bottom-left");
+
+  map.on("load", () => document.getElementById("map").classList.add("loaded"));
+  map.on("error", e => console.error("[maplibre]", e && e.error ? e.error : e));
+
+  // ---- Live MTA trains (GTFS-Realtime trip_updates) ------------------------
+  // Subway feeds publish trip_update messages — predicted arrivals at upcoming
+  // stops. None include vehicle GPS, so each dot is plotted at the trip's next
+  // upcoming stop (i.e. "train approaching this station in N minutes").
+  const SUBWAY_FEEDS = [
+    "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs",
+    "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs-nqrw",
+    "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs-g",
+    "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs-ace",
+    "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs-bdfm",
+    "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs-jz",
+    "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs-l",
+    "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs-si",
+  ];
+  const SUBWAY_COLORS = {
+    "1":"#EE352E","2":"#EE352E","3":"#EE352E",
+    "4":"#00933C","5":"#00933C","6":"#00933C",
+    "7":"#B933AD",
+    "A":"#0039A6","C":"#0039A6","E":"#0039A6",
+    "B":"#FF6319","D":"#FF6319","F":"#FF6319","M":"#FF6319",
+    "G":"#6CBE45",
+    "J":"#996633","Z":"#996633",
+    "L":"#A7A9AC",
+    "N":"#FCCC0A","Q":"#FCCC0A","R":"#FCCC0A","W":"#FCCC0A",
+    "S":"#808183","GS":"#808183","FS":"#808183","H":"#808183","SI":"#0078C6",
+  };
+
+  // Map RT route_id to the letter/number shown on the MTA bullet.
+  // GS/FS/H = Times Sq, Franklin Av, Rockaway shuttles (all display as "S").
+  // SI/SIR  = Staten Island Railway. "6X"/"7X"/"FX" are express variants.
+  function routeLabel(routeId) {
+    if (!routeId) return "?";
+    if (routeId === "GS" || routeId === "FS" || routeId === "H") return "S";
+    if (routeId === "SI" || routeId === "SIR") return "SIR";
+    return routeId.replace(/X$/, "");
+  }
+  // Routes whose bullets use a black numeral instead of white (yellow lines).
+  const BLACK_ON = ["N", "Q", "R", "W"];
+  function routeInkColor(routeId) {
+    return BLACK_ON.includes(routeId) ? "#000000" : "#ffffff";
+  }
+
+  let stops = null;              // gtfs_stop_id → {lon, lat, name}
+  let routesData = null;         // { routes: {service: {coords, arcs, stops}}, rt_to_service }
+  let liveTimer = null;
+  let pulseRAF = null;
+  let animRAF = null;
+  let lastAnimAt = 0;
+  let lastFC = { type: "FeatureCollection", features: [] };
+  // Per-trip animation state. tripId → segment metadata; the animation loop
+  // interpolates each train's arc-length along the route polyline.
+  const trainState = new Map();
+
+  async function loadRoutes() {
+    if (routesData) return routesData;
+    routesData = await fetch("data/mta-routes.json").then(r => r.json());
+    return routesData;
+  }
+
+  // Convert an arc-length offset along a route's polyline back to a coord.
+  // Binary search across cumulative arcs[], then linearly interpolate within
+  // the bounding segment. Returns null if service unknown.
+  function arcToCoord(service, arc) {
+    const r = routesData?.routes?.[service];
+    if (!r) return null;
+    const N = r.arcs.length;
+    if (arc <= r.arcs[0])     return r.coords[0].slice();
+    if (arc >= r.arcs[N - 1]) return r.coords[N - 1].slice();
+    let lo = 0, hi = N - 1;
+    while (lo < hi - 1) {
+      const mid = (lo + hi) >> 1;
+      if (r.arcs[mid] <= arc) lo = mid; else hi = mid;
+    }
+    const segLen = r.arcs[hi] - r.arcs[lo];
+    const t = segLen > 0 ? (arc - r.arcs[lo]) / segLen : 0;
+    const A = r.coords[lo], B = r.coords[hi];
+    return [A[0] + (B[0] - A[0]) * t, A[1] + (B[1] - A[1]) * t];
+  }
+
+  // Bearing (deg, 0=N, clockwise) from a→b along the great circle. For our
+  // metro-scale segments this is essentially the same as a planar atan2 but
+  // doing it right means the arrow points correctly at all latitudes.
+  function bearing(a, b) {
+    const φ1 = a[1] * Math.PI / 180, φ2 = b[1] * Math.PI / 180;
+    const dλ = (b[0] - a[0]) * Math.PI / 180;
+    const y = Math.sin(dλ) * Math.cos(φ2);
+    const x = Math.cos(φ1) * Math.sin(φ2) - Math.sin(φ1) * Math.cos(φ2) * Math.cos(dλ);
+    return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+  }
+
+  // Canvas-drawn chevron used as the direction arrow. Anchored at center;
+  // arrow tip near the top of the canvas so `icon-offset:[0,-N]` pushes the
+  // tip outward from the bullet along the bearing direction.
+  function makeArrowImage(size = 32) {
+    const c = document.createElement("canvas");
+    c.width = c.height = size;
+    const ctx = c.getContext("2d");
+    ctx.fillStyle = "#ffffff";
+    ctx.strokeStyle = "rgba(0,0,0,0.35)";
+    ctx.lineWidth = 1.2;
+    ctx.lineJoin = "round";
+    const cx = size / 2;
+    const tipY = size * 0.08;
+    const baseY = size * 0.40;
+    const halfW = size * 0.18;
+    ctx.beginPath();
+    ctx.moveTo(cx, tipY);
+    ctx.lineTo(cx + halfW, baseY);
+    ctx.lineTo(cx, baseY - size * 0.06);  // notch — gives the chevron look
+    ctx.lineTo(cx - halfW, baseY);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    return ctx.getImageData(0, 0, size, size);
+  }
+
+  async function loadStops() {
+    if (stops) return stops;
+    stops = await fetch("data/mta-stops.json").then(r => r.json());
+    return stops;
+  }
+
+  async function fetchFeed(url) {
+    const r = await fetch(url, { cache: "no-cache" });
+    if (!r.ok) throw new Error(`${r.status} ${url}`);
+    const buf = new Uint8Array(await r.arrayBuffer());
+    return FEED_MESSAGE.decode(buf);
+  }
+
+  // Refresh the per-trip state map. Each entry describes a line segment
+  // (prev_stop → next_stop) with the timing window the train is traversing.
+  // The animation loop reads from this map every frame.
+  async function refreshSubway() {
+    if (!stops) await loadStops();
+    if (!routesData) await loadRoutes();
+    const nowSec = Date.now() / 1000;
+    const results = await Promise.allSettled(SUBWAY_FEEDS.map(u => fetchFeed(u)));
+    const seen = new Set();
+    let lateCount = 0;
+    let skippedCanceled = 0, skippedUnassigned = 0;
+
+    for (const r of results) {
+      if (r.status !== "fulfilled") continue;
+      for (const e of r.value.entity || []) {
+        const tu = e.tripUpdate; if (!tu) continue;
+        const trip = tu.trip; if (!trip) continue;
+        const tripId = trip.tripId; if (!tripId) continue;
+        // Filter: trip explicitly canceled in the feed.
+        if (trip.scheduleRelationship === 3) { skippedCanceled++; continue; }
+        // Filter: NYC extension says no train is physically assigned to this
+        // trip (scheduled run not yet operating). More reliable than nextIdx>0.
+        const nyct = trip.nyctTripDescriptor;
+        if (nyct && nyct.isAssigned === false) { skippedUnassigned++; continue; }
+        const route = trip.routeId;
+        const updates = tu.stopTimeUpdate || [];
+
+        let nextIdx = -1;
+        for (let i = 0; i < updates.length; i++) {
+          const t = Number(updates[i].arrival?.time ?? updates[i].departure?.time ?? 0);
+          if (t > nowSec) { nextIdx = i; break; }
         }
+        if (nextIdx < 0) continue;
+        // Skip trips that haven't actually departed yet — these are scheduled
+        // future runs queued in the feed (e.g. 7 S shuttles stacked at Grand
+        // Central with 30-min ETAs). A real running train has at least one
+        // past stop in its update array.
+        if (nextIdx === 0) continue;
+
+        const next = updates[nextIdx];
+        const nextSid = String(next.stopId || "").replace(/[NS]$/, "");
+        const nextStop = stops[nextSid]; if (!nextStop) continue;
+        const t1 = Number(next.arrival?.time ?? next.departure?.time ?? 0);
+        const delay = Number(next.arrival?.delay ?? next.departure?.delay ?? 0);
+        if (delay >= 120) lateCount++;
+
+        // previous stop = the segment's origin, both for animation and bearing
+        let prevCoord = null;
+        let feedT0 = nowSec;        // fallback: train just appeared, no anim
+        if (nextIdx > 0) {
+          const prev = updates[nextIdx - 1];
+          const prevSid = String(prev.stopId || "").replace(/[NS]$/, "");
+          const prevStop = stops[prevSid];
+          if (prevStop) {
+            prevCoord = [prevStop.lon, prevStop.lat];
+            feedT0 = Number(prev.departure?.time ?? prev.arrival?.time ?? nowSec);
+            // sanity: if prev time is in the future or after t1, fall back
+            if (feedT0 >= t1 || feedT0 > nowSec) feedT0 = Math.max(nowSec - 5, t1 - 90);
+          }
+        }
+        if (!prevCoord) prevCoord = [nextStop.lon, nextStop.lat];
+
+        // Look up arc-length offsets so the animation loop can lerp along the
+        // actual track polyline. Fall back to straight-line if the route or
+        // stops aren't in routesData (rare service patterns, GO reroutes).
+        const service = routesData.rt_to_service[route];
+        const routeShape = service ? routesData.routes[service] : null;
+        const prevSidForArc = (nextIdx > 0)
+          ? String(updates[nextIdx - 1].stopId || "").replace(/[NS]$/, "")
+          : null;
+        const prevArc = (routeShape && prevSidForArc) ? routeShape.stops[prevSidForArc] : undefined;
+        const nextArc = routeShape ? routeShape.stops[nextSid] : undefined;
+
+        // Trip destination = last stop in the predicted itinerary.
+        let destName = null;
+        if (updates.length) {
+          const lastSid = String(updates[updates.length - 1].stopId || "").replace(/[NS]$/, "");
+          destName = stops[lastSid]?.name || null;
+        }
+
+        // NYC extension: actual_track vs scheduled_track on the next stop —
+        // surfacing a track change is genuinely useful to riders. We only
+        // flag a change when both values are present and differ.
+        const nyctStop = next.nyctStopTimeUpdate;
+        const schedTrack = nyctStop?.scheduledTrack;
+        const actualTrack = nyctStop?.actualTrack;
+        const trackChange = (schedTrack && actualTrack && schedTrack !== actualTrack)
+          ? `${schedTrack}→${actualTrack}` : null;
+
+        // Segment identity = which two stops we're traveling between. Same
+        // segment across polls → preserve t0 so the feed's drifting
+        // prev_arrival.time doesn't pull the bullet backward each refresh.
+        const segKey = `${prevCoord[0]},${prevCoord[1]}>${nextStop.lon},${nextStop.lat}`;
+        const existing = trainState.get(tripId);
+        const t0 = (existing && existing.segKey === segKey) ? existing.t0 : feedT0;
+
+        seen.add(tripId);
+        trainState.set(tripId, {
+          segKey,
+          a: prevCoord,
+          b: [nextStop.lon, nextStop.lat],
+          t0, t1,
+          service, prevArc, nextArc,
+          props: {
+            route,
+            label: routeLabel(route),
+            color: SUBWAY_COLORS[route] || "#808080",
+            tripId,
+            stopName: nextStop.name,
+            destination: destName,
+            trackChange,
+            delaySec: delay,
+            late: delay >= 120,
+          },
+        });
+      }
+    }
+
+    // Drop trains that fell out of the feed (trip ended or feed lapsed)
+    for (const k of trainState.keys()) if (!seen.has(k)) trainState.delete(k);
+
+    return { tripCount: trainState.size, lateCount };
+  }
+
+  // Compute the live FeatureCollection at the current instant. For each
+  // train, lerp arc length along the route polyline (shape-aware), then
+  // group by rounded coord so converging trains cluster.
+  function buildLiveFC() {
+    const nowSec = Date.now() / 1000;
+    const flat = [];
+    for (const t of trainState.values()) {
+      const span = t.t1 - t.t0;
+      const frac = span > 0 ? Math.max(0, Math.min(1, (nowSec - t.t0) / span)) : 1;
+
+      let lon, lat, brg = null;
+      if (t.service && Number.isFinite(t.prevArc) && Number.isFinite(t.nextArc)) {
+        const curArc = t.prevArc + (t.nextArc - t.prevArc) * frac;
+        const here = arcToCoord(t.service, curArc);
+        if (here) {
+          [lon, lat] = here;
+          // tangent: sample 25m ahead in the direction of travel
+          const dir = t.nextArc >= t.prevArc ? 1 : -1;
+          const ahead = arcToCoord(t.service, curArc + dir * 25);
+          if (ahead && (ahead[0] !== lon || ahead[1] !== lat)) {
+            brg = bearing([lon, lat], ahead);
+          }
+        }
+      }
+      // Fallback: straight-line lerp between prev_stop and next_stop
+      if (lon === undefined) {
+        lon = t.a[0] + (t.b[0] - t.a[0]) * frac;
+        lat = t.a[1] + (t.b[1] - t.a[1]) * frac;
+        if (t.a[0] !== t.b[0] || t.a[1] !== t.b[1]) brg = bearing(t.a, t.b);
+      }
+
+      const etaMin = Math.max(0, Math.round((t.t1 - nowSec) / 60));
+      const props = { ...t.props, etaMin };
+      if (brg !== null) props.bearing = brg;
+      flat.push({ lon, lat, props });
+    }
+    // Group by ~5m precision so trains "at" the same station merge.
+    const buckets = new Map();
+    for (const f of flat) {
+      const key = `${f.lon.toFixed(4)},${f.lat.toFixed(4)}`;
+      if (!buckets.has(key)) buckets.set(key, []);
+      buckets.get(key).push(f);
+    }
+    const features = [];
+    for (const group of buckets.values()) {
+      group.sort((a, b) => a.props.etaMin - b.props.etaMin);
+      const lead = group[0];
+      const trips = group.map(g => ({
+        route: g.props.route,
+        label: g.props.label,
+        color: g.props.color,
+        etaMin: g.props.etaMin,
+        delaySec: g.props.delaySec,
+        late: g.props.late,
+        destination: g.props.destination,
+        trackChange: g.props.trackChange,
+      }));
+      const props = {
+        ...lead.props,
+        count: group.length,
+        anyLate: group.some(g => g.props.late),
+        trips: JSON.stringify(trips),
+      };
+      if (group.length > 1) delete props.bearing;
+      features.push({
+        type: "Feature",
+        geometry: { type: "Point", coordinates: [lead.lon, lead.lat] },
+        properties: props,
+      });
+    }
+    return { type: "FeatureCollection", features };
+  }
+
+  async function tickLive() {
+    const btn = document.getElementById("toggleSubway");
+    if (!btn.classList.contains("on")) return;
+    btn.classList.add("loading");
+    try {
+      const { tripCount, lateCount } = await refreshSubway();
+      const fc = buildLiveFC();
+      lastFC = fc;
+      const src = map.getSource("live-subway");
+      if (src) src.setData(fc);
+      const status = document.getElementById("liveStatus");
+      status.textContent = `${tripCount} trains · ${lateCount} late`;
+      status.hidden = false;
+    } catch (err) {
+      console.warn("[live-subway]", err);
+    } finally {
+      btn.classList.remove("loading");
+    }
+  }
+
+  // 20fps animation loop: recompute interpolated positions and bearings along
+  // each train's route polyline, group by rounded coord, setData.
+  function startAnimLoop() {
+    if (animRAF) return;
+    const tick = (now) => {
+      if (now - lastAnimAt < 50) { animRAF = requestAnimationFrame(tick); return; }
+      lastAnimAt = now;
+      const src = map.getSource("live-subway");
+      if (!src) { animRAF = null; return; }
+      const fc = buildLiveFC();
+      lastFC = fc;
+      src.setData(fc);
+      animRAF = requestAnimationFrame(tick);
+    };
+    animRAF = requestAnimationFrame(tick);
+  }
+  function stopAnimLoop() { if (animRAF) { cancelAnimationFrame(animRAF); animRAF = null; } }
+
+  function startLiveTimer() {
+    stopLiveTimer();
+    tickLive();
+    liveTimer = setInterval(tickLive, 5_000);
+  }
+  function stopLiveTimer() {
+    if (liveTimer) { clearInterval(liveTimer); liveTimer = null; }
+    trainState.clear();
+    lastFC = { type: "FeatureCollection", features: [] };
+    const src = map.getSource("live-subway");
+    if (src) src.setData(lastFC);
+    const s = document.getElementById("liveStatus");
+    if (s) s.hidden = true;
+  }
+
+  // Reused on every hover; setHTML/setLngLat overwrite prior content.
+  const hoverPopup = new maplibregl.Popup({
+    closeButton: false, closeOnClick: false, offset: 14, maxWidth: "260px",
+  });
+
+  function bulletHTML(route) {
+    const label = routeLabel(route);
+    const color = SUBWAY_COLORS[route] || "#808080";
+    const ink = routeInkColor(route);
+    return `<span style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:${color};color:${ink};font:700 11px -apple-system,Segoe UI,sans-serif;flex-shrink:0">${label}</span>`;
+  }
+
+  function startPulse() {
+    if (pulseRAF) return;
+    const start = performance.now();
+    const loop = (now) => {
+      if (!map.getLayer("live-subway-arrow")) { pulseRAF = null; return; }
+      const phase = ((now - start) / 1200) % 1;            // 1.2s period
+      const eased = 0.5 - 0.5 * Math.cos(phase * Math.PI * 2);
+      const opacity = 0.55 + 0.45 * eased;
+      map.setPaintProperty("live-subway-arrow", "icon-opacity", opacity);
+      pulseRAF = requestAnimationFrame(loop);
+    };
+    pulseRAF = requestAnimationFrame(loop);
+  }
+  function stopPulse() { if (pulseRAF) { cancelAnimationFrame(pulseRAF); pulseRAF = null; } }
+
+  function addLiveLayers() {
+    // Seed with the most recent fetched data so dots survive a theme swap.
+    map.addSource("live-subway", { type: "geojson", data: lastFC });
+
+    // Bullet — slightly larger when this point represents multiple trains.
+    map.addLayer({
+      id: "live-subway-dot", type: "circle", source: "live-subway",
+      paint: {
+        "circle-radius": [
+          "interpolate", ["linear"], ["zoom"],
+          9,  ["case", [">", ["get", "count"], 1], 7.5,  6],
+          12, ["case", [">", ["get", "count"], 1], 10,   8],
+          14, ["case", [">", ["get", "count"], 1], 12.5, 10],
+          16, ["case", [">", ["get", "count"], 1], 16,   13],
+        ],
+        "circle-color": ["get", "color"],
+        "circle-stroke-width": ["case", ["==", ["get", "anyLate"], true], 2.5, 1.2],
+        "circle-stroke-color": ["case", ["==", ["get", "anyLate"], true], "#e63946", "#ffffff"],
+        "circle-opacity": 0.97,
       },
-      layers: layers("protomaps", THEME, "en")
+    });
+
+    // Direction-of-travel chevron — appears just outside the bullet, rotated
+    // along the bearing from the previous to next stop. Pulses subtly so live
+    // trains read as "moving" even between 15s polls.
+    map.addLayer({
+      id: "live-subway-arrow", type: "symbol", source: "live-subway",
+      filter: ["has", "bearing"],
+      layout: {
+        "icon-image": "train-arrow",
+        "icon-size": ["interpolate", ["linear"], ["zoom"], 9, 0.45, 14, 0.6, 16, 0.75],
+        "icon-rotate": ["get", "bearing"],
+        "icon-rotation-alignment": "map",
+        "icon-allow-overlap": true,
+        "icon-ignore-placement": true,
+        "icon-offset": [0, -22],   // push tip outward from the bullet edge
+      },
+      paint: { "icon-opacity": 0.9 },
+    });
+
+    // The route letter centered on the bullet — white text by default, black
+    // for yellow lines (N/Q/R/W) so the MTA branding reads correctly.
+    map.addLayer({
+      id: "live-subway-label", type: "symbol", source: "live-subway",
+      layout: {
+        "text-field": ["get", "label"],
+        "text-font": ["Noto Sans Medium"],
+        "text-size": ["interpolate", ["linear"], ["zoom"], 9, 7, 12, 9, 14, 11, 16, 14],
+        "text-anchor": "center",
+        "text-allow-overlap": true,
+        "text-ignore-placement": true,
+        "text-padding": 0,
+      },
+      paint: {
+        "text-color": ["match", ["get", "route"], ["N","Q","R","W"], "#000000", "#ffffff"],
+        "text-halo-color": "rgba(0,0,0,0.18)",
+        "text-halo-width": 0.4,
+      },
+    });
+
+    function tripRow(t) {
+      const etaText = t.etaMin === 0 ? "arriving now" : `arr ${t.etaMin}m`;
+      const lateText = t.late
+        ? ` <b style="color:#e63946">+${Math.round((t.delaySec || 0) / 60)}m late</b>`
+        : "";
+      const trackText = t.trackChange
+        ? ` <span style="background:#fff1d6;color:#9a4d00;padding:1px 5px;border-radius:4px;font-weight:600;font-size:10.5px">trk ${t.trackChange}</span>`
+        : "";
+      const destText = t.destination
+        ? ` <span style="color:#888">→ ${t.destination}</span>`
+        : "";
+      return `
+        <div style="display:flex;align-items:center;gap:8px;font-size:12px;line-height:1.35">
+          ${bulletHTML(t.route)}
+          <span style="color:#333">${etaText}${lateText}${trackText}${destText}</span>
+        </div>`;
+    }
+
+    function showPopup(e) {
+      map.getCanvas().style.cursor = "pointer";
+      const f = e.features[0]; if (!f) return;
+      const p = f.properties;
+      const count = Number(p.count) || 1;
+      const trips = JSON.parse(p.trips);                       // sorted by ETA
+      const stationHeader = `<div style="font-weight:600;font-size:12.5px;margin-bottom:${count > 1 ? 6 : 4}px">approaching ${p.stopName}${count > 1 ? ` <span style="color:#888;font-weight:500;font-size:11px">· ${count} trains</span>` : ""}</div>`;
+      const body = trips.map(tripRow).join("");
+      hoverPopup
+        .setLngLat(f.geometry.coordinates.slice())
+        .setHTML(`
+          <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;display:flex;flex-direction:column;gap:4px">
+            ${stationHeader}
+            ${body}
+          </div>`)
+        .addTo(map);
+    }
+    function hidePopup() {
+      map.getCanvas().style.cursor = "";
+      hoverPopup.remove();
+    }
+    for (const id of ["live-subway-dot", "live-subway-label"]) {
+      map.on("mouseenter", id, showPopup);
+      map.on("mousemove",  id, showPopup);
+      map.on("mouseleave", id, hidePopup);
+    }
+  }
+
+  function ensureLiveLayer() {
+    if (!map.isStyleLoaded()) return;
+    if (!map.hasImage("train-arrow")) map.addImage("train-arrow", makeArrowImage(32));
+    if (map.getSource("live-subway")) return;
+    addLiveLayers();                            // already seeded with lastFC
+    if (document.getElementById("toggleSubway").classList.contains("on")) {
+      startPulse();
+      startAnimLoop();
+      // Existing setInterval keeps polling; if it's been cleared (toggle was
+      // off across the swap), kick it back on.
+      if (!liveTimer) startLiveTimer();
+    }
+  }
+  map.on("load", ensureLiveLayer);
+  map.on("styledata", ensureLiveLayer);
+
+  // Subway toggle starts OFF — only fetch when user opts in.
+  const subBtn = document.getElementById("toggleSubway");
+  subBtn.classList.remove("on");
+  subBtn.setAttribute("aria-pressed", "false");
+  subBtn.addEventListener("click", async () => {
+    const on = !subBtn.classList.contains("on");
+    subBtn.classList.toggle("on", on);
+    subBtn.setAttribute("aria-pressed", String(on));
+    if (on) {
+      startLiveTimer(); startPulse(); startAnimLoop();
+      // Route polylines + station dots come along with live trains.
+      await Promise.all([ensureLinesFC(), ensureStationsFC()]);
+      addLinesLayer();
+      addStationsLayer();
+    } else {
+      stopLiveTimer(); stopPulse(); stopAnimLoop();
+      removeLinesLayer();
+      removeStationsLayer();
     }
   });
 
-  map.addControl(new maplibregl.NavigationControl(), "top-right");
-  map.addControl(new maplibregl.ScaleControl({ unit: "imperial" }), "bottom-left");
+  // Rail toggle is a placeholder — LIRR/MNR live needs their static GTFS for
+  // stop_id → coords mapping. Wired in a follow-up.
+  const railBtn = document.getElementById("toggleRail");
+  railBtn.classList.remove("on");
+  railBtn.setAttribute("aria-pressed", "false");
+  railBtn.disabled = true;
+  railBtn.title = "Coming soon — needs LIRR/MNR stop coordinates";
+  railBtn.style.opacity = "0.45";
+  railBtn.style.cursor = "not-allowed";
 
-  // surface any style/tile errors in the console so we can debug fast
-  map.on("error", e => console.error("[maplibre]", e && e.error ? e.error : e));
+  // ---- Subway route lines overlay (tied to the Subway toggle) -------------
+  // MTA Subway Service Lines (NY OpenData s692-irgq), pre-processed into a
+  // GeoJSON FeatureCollection of MultiLineStrings with the official MTA route
+  // color baked into each feature's `color` property. ~4.5 MB.
+  //
+  // Per-service `line-offset` splays parallel routes on shared corridors so
+  // BDFM, NQRW, 4/5/6, A/C/E, 1/2/3 etc. each get a visible band instead of
+  // stacking into a single color. Offsets are in pixels perpendicular to
+  // the line direction; positive = right, negative = left.
+  const ROUTE_OFFSET_EXPR = ["match", ["get", "service"],
+    "1", -3, "2",  0, "3",  3,                      // 7 Av: local, exp, exp
+    "4", -3, "5",  0, "5 Peak", 0, "6",  3,         // Lex: exp, exp, local
+    "A", -3, "C",  0, "E",  3,                      // 8 Av: exp, local, local
+    "B", -4.5, "D", -1.5, "F", 1.5, "M", 4.5,       // 6 Av corridor (4 lines)
+    "N", -4.5, "Q", -1.5, "R", 1.5, "W", 4.5,       // BMT Broadway (4 lines)
+    "J", -1.5, "Z", 1.5,                            // Nassau
+    0,                                              // singletons: 7, G, L, SIR, shuttles
+  ];
 
-  // Overlay slot for hydrology data:
-  // map.on("load", () => {
-  //   map.addSource("nhd-flowlines", { type: "geojson", data: "data/nhd-flowlines.geojson" });
-  //   map.addLayer({ id: "nhd-flowlines", type: "line", source: "nhd-flowlines",
-  //                  paint: { "line-color": "#3a7bd5", "line-width": 1 } });
-  // });
+  let linesFC = null;
+  let stationsFC = null;
+
+  async function ensureLinesFC() {
+    if (linesFC) return linesFC;
+    linesFC = await fetch("data/mta-lines.geojson").then(r => r.json());
+    return linesFC;
+  }
+
+  async function ensureStationsFC() {
+    if (stationsFC) return stationsFC;
+    if (!stops) await loadStops();
+    stationsFC = {
+      type: "FeatureCollection",
+      features: Object.entries(stops).map(([id, s]) => ({
+        type: "Feature",
+        id,
+        geometry: { type: "Point", coordinates: [s.lon, s.lat] },
+        properties: { id, name: s.name },
+      })),
+    };
+    return stationsFC;
+  }
+
+  function addStationsLayer() {
+    if (!stationsFC || map.getSource("mta-stations-static")) return;
+    map.addSource("mta-stations-static", { type: "geojson", data: stationsFC });
+    // Sit between the lines (below) and the live trains (above).
+    const beforeId = map.getLayer("live-subway-dot") ? "live-subway-dot" : undefined;
+    map.addLayer({
+      id: "mta-stations-dot", type: "circle", source: "mta-stations-static",
+      minzoom: 11.5,
+      paint: {
+        "circle-radius": ["interpolate", ["linear"], ["zoom"], 11.5, 1.5, 13, 2.2, 15, 3.4, 17, 5],
+        "circle-color": "#ffffff",
+        "circle-stroke-color": "#1a1f2c",
+        "circle-stroke-width": ["interpolate", ["linear"], ["zoom"], 11.5, 0.6, 14, 1.1, 17, 1.6],
+        "circle-opacity": 0.95,
+      },
+    }, beforeId);
+  }
+
+  function removeStationsLayer() {
+    if (map.getLayer("mta-stations-dot")) map.removeLayer("mta-stations-dot");
+    if (map.getSource("mta-stations-static")) map.removeSource("mta-stations-static");
+  }
+
+  function addLinesLayer() {
+    if (map.getSource("mta-lines")) return;
+    if (!linesFC) return;
+    map.addSource("mta-lines", { type: "geojson", data: linesFC });
+    const beforeId = map.getLayer("live-subway-dot") ? "live-subway-dot" : undefined;
+    map.addLayer({
+      id: "mta-lines-layer", type: "line", source: "mta-lines",
+      layout: { "line-join": "round", "line-cap": "round" },
+      paint: {
+        // Use muted variants for yellow (NQRW) and green (4/5/6 + G) lines —
+        // the MTA defaults are saturated enough to wash out the basemap. The
+        // bullets above still use the bright official colors for branding.
+        "line-color": ["match", ["get", "service"],
+          ["N", "Q", "R", "W"],            "#d9b300",
+          ["4", "5", "5 Peak", "6"],       "#1d7d40",
+          "G",                              "#5fa848",
+          ["get", "color"],
+        ],
+        "line-width": ["interpolate", ["linear"], ["zoom"], 8, 1.0, 11, 2.0, 13, 3.2, 15, 4.5, 17, 6.5],
+        "line-offset": ROUTE_OFFSET_EXPR,
+        "line-opacity": ["interpolate", ["linear"], ["zoom"], 8, 0.65, 12, 0.78, 16, 0.88],
+      },
+    }, beforeId);
+  }
+
+  function removeLinesLayer() {
+    if (map.getLayer("mta-lines-layer")) map.removeLayer("mta-lines-layer");
+    if (map.getSource("mta-lines")) map.removeSource("mta-lines");
+  }
+
+  // Lines + station dots visibility follows the Subway toggle state,
+  // including across style swaps.
+  function ensureSubwayOverlay() {
+    if (!document.getElementById("toggleSubway").classList.contains("on")) return;
+    if (!map.isStyleLoaded()) return;
+    if (linesFC)    addLinesLayer();
+    if (stationsFC) addStationsLayer();
+  }
+  map.on("load", ensureSubwayOverlay);
+  map.on("styledata", ensureSubwayOverlay);
+
+  // ---- Tick: keep clock + auto-phase in sync -------------------------------
+  function tick() {
+    document.getElementById("phaseTime").textContent = nycTimeStr();
+    if (mode === "auto") {
+      const p = phaseForNow();
+      if (p !== active) applyTheme(p, { manual: false });
+    }
+  }
+  setInterval(tick, 60_000);
+
+  updateCloud();
+  setInterval(updateCloud, 15 * 60_000);
 </script>
 </body>
 </html>
