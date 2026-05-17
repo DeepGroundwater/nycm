@@ -28,6 +28,7 @@ impl PartialEq for Frontier {
 }
 impl Ord for Frontier {
     fn cmp(&self, o: &Self) -> Ordering {
+        debug_assert!(self.f.is_finite() && o.f.is_finite(), "Frontier::f must be finite");
         // reverse so the heap pops the lowest f first
         o.f.partial_cmp(&self.f).unwrap_or(Ordering::Equal)
     }
@@ -100,6 +101,8 @@ fn reconstruct_polyline(
     let mut edges_used: Vec<u32> = Vec::new();
     let mut cur = dst;
     while cur != src {
+        debug_assert_ne!(came_from[cur as usize], u32::MAX,
+            "reconstruct_polyline: came_from chain broken at node {cur}");
         let edge_idx = came_edge[cur as usize];
         let prev = came_from[cur as usize];
         edges_used.push(edge_idx);
