@@ -40,6 +40,9 @@ jobs:
           cd nycm-router
           wasm-pack build --release --target web --out-dir ../pkg
 
+      - name: WASM smoke test
+        run: node tests/wasm/smoke.mjs
+
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
