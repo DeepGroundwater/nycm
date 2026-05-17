@@ -22,11 +22,28 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - name: Assemble PMTiles from chunks
         run: bash scripts/assemble-tiles.sh
+
+      - name: Assemble walk_graph.bin from chunks
+        run: bash scripts/assemble-walk-graph.sh
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - uses: jetli/wasm-pack-action@v0.4.0
+
+      - name: Build WASM
+        run: |
+          cd nycm-router
+          wasm-pack build --release --target web --out-dir ../pkg
+
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
           path: .
+
       - id: deployment
         uses: actions/deploy-pages@v4
