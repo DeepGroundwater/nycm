@@ -111,6 +111,66 @@
   .maplibregl-ctrl-bottom-right .maplibregl-ctrl { margin: 0 8px 8px 0; }
   .maplibregl-ctrl-top-right .maplibregl-ctrl { margin: 16px 16px 0 0; }
   .maplibregl-ctrl-bottom-left .maplibregl-ctrl { margin: 0 0 12px 16px; }
+
+  .search {
+    position: absolute;
+    top: 16px; right: 16px;
+    z-index: 1;
+    width: 320px;
+    padding: 10px;
+    background: var(--chip-bg);
+    border: 1px solid var(--chip-border);
+    border-radius: 12px;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 8px 24px rgba(15, 23, 42, 0.06);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    color: var(--ink);
+    font-family: inherit;
+  }
+  .search-row { display: flex; gap: 6px; margin-bottom: 6px; }
+  .search-row:last-of-type { margin-bottom: 0; }
+  .search-input {
+    flex: 1;
+    padding: 6px 10px;
+    font: inherit; font-size: 13px;
+    border: 1px solid var(--chip-border);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.5);
+    color: var(--ink);
+    outline: none;
+    transition: border-color 160ms ease;
+  }
+  .search-input:focus { border-color: var(--ink); }
+  .swap-btn, .go-btn {
+    font: inherit; font-size: 13px; font-weight: 600;
+    border: 1px solid var(--chip-border);
+    border-radius: 8px;
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    padding: 0 10px;
+    transition: all 160ms ease;
+  }
+  .go-btn:not([disabled]) { background: var(--ink); color: var(--earth); border-color: var(--ink); }
+  .go-btn[disabled] { cursor: not-allowed; opacity: 0.5; }
+  .search-dropdown {
+    margin-top: 6px;
+    max-height: 220px;
+    overflow-y: auto;
+    border: 1px solid var(--chip-border);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.92);
+  }
+  .search-result {
+    padding: 6px 10px;
+    cursor: pointer;
+    font-size: 12.5px;
+    border-bottom: 1px solid var(--chip-border);
+  }
+  .search-result:last-child { border-bottom: none; }
+  .search-result:hover, .search-result.active { background: rgba(38, 70, 83, 0.08); }
+  .search-status { margin-top: 6px; font-size: 11px; color: var(--muted); min-height: 14px; }
+  .search-status.error { color: #b94a4a; }
 </style>
 </head>
 <body>
@@ -128,6 +188,18 @@
     <button class="toggle" id="toggleRail"   style="--dot:#00985F" aria-pressed="false">Rail</button>
   </div>
   <div class="live-status" id="liveStatus" hidden>—</div>
+</div>
+<div class="search" id="search">
+  <div class="search-row">
+    <input class="search-input" id="from-input" type="text" placeholder="From" autocomplete="off"/>
+    <button class="swap-btn" id="swap-btn" title="Swap from/to">⇅</button>
+  </div>
+  <div class="search-row">
+    <input class="search-input" id="to-input" type="text" placeholder="To" autocomplete="off"/>
+    <button class="go-btn" id="go-btn" disabled>Go</button>
+  </div>
+  <div class="search-dropdown" id="search-dropdown" hidden></div>
+  <div class="search-status" id="search-status"></div>
 </div>
 <div id="map"></div>
 <script type="importmap">
@@ -1162,6 +1234,15 @@
 
   updateCloud();
   setInterval(updateCloud, 15 * 60_000);
+
+  import { createSearch } from "./js/search.js";
+
+  const search = createSearch({
+    onRoute(from, to) {
+      console.log("route from", from, "to", to);
+      search.setStatus(`Routing ${from.label} → ${to.label}…`);
+    },
+  });
 </script>
 </body>
 </html>
