@@ -10,7 +10,8 @@ pub struct WalkEdge {
     pub to: u32,
     /// Travel time in seconds at the canonical walking speed (1.35 m/s).
     pub seconds: u32,
-    /// Inclusive byte range into the polyline blob; empty range means "use straight line".
+    /// Half-open index range `[poly_start, poly_end)` into `WalkGraph::polylines`.
+    /// When `poly_start == poly_end` the edge has no interior points (straight line).
     pub poly_start: u32,
     pub poly_end: u32,
 }
