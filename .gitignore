@@ -13,9 +13,6 @@ nycm-router/target/
 pkg/
 Cargo.lock
 
-# Python pipeline artifacts
-.venv/
-
 # Built routing blobs (reassembled from tiles/walk-graph.part-* by CI / dev server)
 tiles/walk_graph.bin
 
