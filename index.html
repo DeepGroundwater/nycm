@@ -1260,12 +1260,47 @@
   setInterval(updateCloud, 15 * 60_000);
 
   import { createSearch } from "./js/search.js";
+  import { route, classifyError, ensureReady } from "./js/router.js";
+  import { renderItinerary, clearItinerary } from "./js/render.js";
+
+  // `map` is the existing MapLibre Map instance — confirm its variable name matches.
 
   const search = createSearch({
-    onRoute(from, to) {
-      console.log("route from", from, "to", to);
-      search.setStatus(`Routing ${from.label} → ${to.label}…`);
+    async onRoute(from, to) {
+      search.setStatus("Routing…");
+      try {
+        const itin = await route({ from, to });
+        renderItinerary(map, itin);
+        search.setStatus("");
+      } catch (e) {
+        const code = classifyError(e);
+        if (code === "origin outside service area")
+          search.setError("Origin is outside the service area (NYC + Long Island).");
+        else if (code === "destination outside service area")
+          search.setError("Destination is outside the service area.");
+        else if (code === "no path found")
+          search.setError("No walking route found between those points.");
+        else
+          search.setError("Routing failed. See console.");
+        console.error(e);
+      }
     },
+  });
+
+  // Pre-warm the WASM + blob fetch in the background after first user interaction
+  // (avoids a cold start when they hit Go).
+  let warmed = false;
+  function warmRouter() {
+    if (warmed) return;
+    warmed = true;
+    ensureReady().catch((e) => console.warn("router pre-warm failed:", e));
+  }
+  document.getElementById("from-input").addEventListener("focus", warmRouter, { once: true });
+  document.getElementById("to-input").addEventListener("focus", warmRouter, { once: true });
+
+  document.addEventListener("dismiss", () => {
+    clearItinerary(map);
+    search.reset();
   });
 </script>
 </body>
