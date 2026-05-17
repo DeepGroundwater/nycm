@@ -7,3 +7,17 @@ __pycache__/
 
 # Assembled PMTiles is rebuilt from tiles/*.part-* by scripts/assemble-tiles.sh
 tiles/nyc-metro.pmtiles
+
+# Rust + WASM
+nycm-router/target/
+pkg/
+Cargo.lock
+
+# Python pipeline artifacts
+.venv/
+
+# Built routing blobs (reassembled from tiles/walk-graph.part-* by CI / dev server)
+tiles/walk_graph.bin
+
+# Raw OSM extracts (downloaded by build-walk-graph.sh, not committed)
+pipelines/cache/

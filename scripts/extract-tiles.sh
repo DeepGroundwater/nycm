@@ -12,9 +12,11 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-# NYC metro + all of Long Island (Nassau + Suffolk to Montauk Point) + inner NJ/Westchester ring
-BBOX="-74.30,40.49,-71.85,41.20"
-MAXZOOM=14
+# Source the shared basemap bbox (single source of truth).
+# shellcheck disable=SC1091
+source "$(dirname "$0")/bbox.env"
+BBOX="$BASEMAP_BBOX"
+MAXZOOM="$BASEMAP_MAXZOOM"
 
 # Protomaps publishes a fresh daily build at a stable rolling URL.
 SRC="https://build.protomaps.com/$(date -u +%Y%m%d).pmtiles"
