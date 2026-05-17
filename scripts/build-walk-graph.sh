@@ -5,7 +5,7 @@
 # $BASEMAP_BBOX, runs the Python pipeline, and splits the output into
 # tiles/walk-graph.part-* chunks (committed; the assembled .bin is gitignored).
 #
-# Requires: osmium-tool, curl, sha256sum, uv
+# Requires: osmium-tool, curl, md5sum, uv
 
 set -euo pipefail
 cd "$(dirname "$0")/.."
