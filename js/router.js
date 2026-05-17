@@ -58,8 +58,9 @@ export async function route({ from, to }) {
 
 /**
  * Inspect what kind of error came back from the WASM boundary.
- * Returns one of: "OriginOutOfBounds", "DestOutOfBounds", "NoPath",
- * "DepartureOutOfRange", "DataVersionMismatch", "MalformedData", or null.
+ * Returns the lowercase Display string of a known RouteError variant
+ * (e.g. "origin outside service area", "no path found"), or null if
+ * the error doesn't match any known variant.
  */
 export function classifyError(err) {
   const msg = String(err?.message ?? err ?? "");
