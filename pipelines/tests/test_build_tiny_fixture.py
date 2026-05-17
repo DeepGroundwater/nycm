@@ -3,6 +3,7 @@ Round-trip check: emit the tiny fixture, then call out to `cargo run --example
 load_tiny_fixture` (a dev binary defined next) to confirm Rust deserializes it.
 """
 import subprocess
+import sys
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
@@ -11,7 +12,7 @@ REPO = Path(__file__).resolve().parents[2]
 def test_fixture_loads_in_rust(tmp_path):
     out = tmp_path / "tiny_walk.bin"
     subprocess.run(
-        ["python", str(REPO / "pipelines" / "build_tiny_fixture.py"), str(out)],
+        [sys.executable, str(REPO / "pipelines" / "build_tiny_fixture.py"), str(out)],
         check=True,
     )
     res = subprocess.run(
