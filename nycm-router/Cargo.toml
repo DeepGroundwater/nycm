@@ -15,7 +15,7 @@ bincode = "1.3"
 thiserror = "1"
 
 [dev-dependencies]
-# golden tests use the rlib build path; no extra deps needed yet
+serde_json = "1"
 
 [profile.release]
 opt-level = 3
