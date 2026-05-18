@@ -111,6 +111,127 @@
   .maplibregl-ctrl-bottom-right .maplibregl-ctrl { margin: 0 8px 8px 0; }
   .maplibregl-ctrl-top-right .maplibregl-ctrl { margin: 16px 16px 0 0; }
   .maplibregl-ctrl-bottom-left .maplibregl-ctrl { margin: 0 0 12px 16px; }
+
+  .loc {
+    margin-top: 10px;
+    border-top: 1px solid var(--chip-border);
+    padding-top: 10px;
+    position: relative;
+  }
+  .loc-input-wrap { position: relative; }
+  .loc-input-wrap + .loc-input-wrap { margin-top: 6px; }
+  .loc-input {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 7px 10px 7px 28px;
+    font: inherit; font-size: 13px;
+    color: var(--ink);
+    background: transparent;
+    border: 1px solid var(--chip-border);
+    border-radius: 8px;
+    outline: none;
+    transition: border-color 160ms ease, background 160ms ease;
+  }
+  .loc-input::placeholder { color: var(--muted); opacity: 0.85; }
+  .loc-input:focus { border-color: var(--ink); background: color-mix(in srgb, var(--ink) 5%, transparent); }
+  .loc-icon {
+    position: absolute; left: 9px; top: 50%; transform: translateY(-50%);
+    width: 13px; height: 13px;
+    pointer-events: none;
+    color: var(--muted);
+    opacity: 0.85;
+  }
+  .loc-dropdown {
+    margin-top: 6px;
+    max-height: 200px;
+    overflow-y: auto;
+    border: 1px solid var(--chip-border);
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--chip-bg) 92%, var(--ink) 3%);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+  }
+  .loc-dropdown[hidden] { display: none; }
+  .loc-result {
+    padding: 6px 10px;
+    cursor: pointer;
+    font-size: 12.5px;
+    color: var(--ink);
+    border-bottom: 1px solid var(--chip-border);
+  }
+  .loc-result:last-child { border-bottom: none; }
+  .loc-result:hover { background: color-mix(in srgb, var(--ink) 12%, transparent); }
+  .loc-result.muted { color: var(--muted); cursor: default; }
+  .loc-result.muted:hover { background: transparent; }
+
+  /* Destination chip — shown after picking a destination */
+  .loc-dest {
+    margin-top: 8px;
+    padding: 8px 10px;
+    background: color-mix(in srgb, var(--ink) 7%, transparent);
+    border: 1px solid var(--chip-border);
+    border-radius: 8px;
+  }
+  .loc-dest[hidden] { display: none; }
+  .loc-dest-label {
+    font-size: 12px; font-weight: 600; color: var(--ink);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    margin-bottom: 6px;
+  }
+  .loc-dir-btn {
+    font: inherit; font-size: 11px; font-weight: 600;
+    letter-spacing: 0.04em;
+    padding: 5px 10px;
+    border: 1px solid var(--ink); background: var(--ink); color: var(--earth);
+    border-radius: 999px;
+    cursor: pointer;
+    transition: opacity 160ms ease;
+  }
+  .loc-dir-btn:hover { opacity: 0.85; }
+
+  /* FROM input section */
+  .loc-from { margin-top: 8px; }
+  .loc-from[hidden] { display: none; }
+
+  /* Route summary — shown after a route renders */
+  .loc-route {
+    margin-top: 8px;
+    padding: 8px 10px;
+    background: color-mix(in srgb, var(--ink) 10%, transparent);
+    border: 1px solid var(--chip-border);
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  }
+  .loc-route[hidden] { display: none; }
+  .loc-route-summary {
+    font-size: 12px; font-weight: 600; color: var(--ink);
+    font-variant-numeric: tabular-nums;
+  }
+  .loc-clear-btn {
+    font: inherit; font-size: 11px; font-weight: 600;
+    padding: 4px 9px;
+    border: 1px solid var(--chip-border); background: transparent; color: var(--muted);
+    border-radius: 999px;
+    cursor: pointer;
+    transition: color 160ms ease, border-color 160ms ease;
+  }
+  .loc-clear-btn:hover { color: var(--ink); border-color: var(--ink); }
+
+  .loc-status {
+    margin-top: 6px; font-size: 11px; color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+  .loc-status[hidden] { display: none; }
+  .loc-status.error { color: #c44a4a; }
+
+  /* Pin marker for the searched destination */
+  .loc-pin {
+    width: 18px; height: 18px;
+    border-radius: 50%;
+    background: var(--ink);
+    border: 2px solid var(--earth);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+  }
 </style>
 </head>
 <body>
@@ -128,6 +249,40 @@
     <button class="toggle" id="toggleRail"   style="--dot:#00985F" aria-pressed="false">Rail</button>
   </div>
   <div class="live-status" id="liveStatus" hidden>—</div>
+
+  <div class="loc" id="loc">
+    <div class="loc-input-wrap">
+      <svg class="loc-icon" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+        <circle cx="9" cy="9" r="6" stroke="currentColor" stroke-width="2"/>
+        <path d="M14 14L18 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      </svg>
+      <input id="loc-input" class="loc-input" type="text" placeholder="Search a place" autocomplete="off" />
+    </div>
+    <div class="loc-dropdown" id="loc-dropdown" hidden></div>
+
+    <div class="loc-dest" id="loc-dest" hidden>
+      <div class="loc-dest-label" id="loc-dest-label"></div>
+      <button class="loc-dir-btn" id="loc-dir-btn">Directions from…</button>
+    </div>
+
+    <div class="loc-from" id="loc-from" hidden>
+      <div class="loc-input-wrap">
+        <svg class="loc-icon" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+          <circle cx="10" cy="10" r="3" fill="currentColor"/>
+          <circle cx="10" cy="10" r="7" stroke="currentColor" stroke-width="1.5" opacity="0.5"/>
+        </svg>
+        <input id="from-input" class="loc-input" type="text" placeholder="Starting point" autocomplete="off" />
+      </div>
+      <div class="loc-dropdown" id="from-dropdown" hidden></div>
+    </div>
+
+    <div class="loc-route" id="loc-route" hidden>
+      <div class="loc-route-summary" id="loc-route-summary"></div>
+      <button class="loc-clear-btn" id="loc-clear-btn">Clear</button>
+    </div>
+
+    <div class="loc-status" id="loc-status" hidden></div>
+  </div>
 </div>
 <div id="map"></div>
 <script type="importmap">
@@ -253,9 +408,9 @@
     };
   }
 
-  // ---- 6 time-of-day themes -------------------------------------------------
+  // ---- 5 time-of-day themes -------------------------------------------------
   // Luminosity ramp: dawn (pale) → morning (cool light) → afternoon (warm bright)
-  // → evening (golden) → dusk (deep purple) → night (near-black).
+  // → evening (golden) → night (near-black).
   const themes = {
     dawn: {
       name: "Dawn", base: "light", sprite: SPRITE_LIGHT,
@@ -309,19 +464,6 @@
         waterLabel: "#8ecae6", ink: "#023047", muted: "#fb8500", halo: "#ffe8c4",
       }),
     },
-    dusk: {
-      name: "Dusk", base: "dark", sprite: SPRITE_DARK,
-      chrome: { earth: "#240046", ink: "#e0aaff", muted: "#c77dff", chipBg: "rgba(16,0,43,0.88)", chipBorder: "rgba(224,170,255,0.24)" },
-      theme: makeTheme({
-        earth: "#240046", water: "#480ca8", building: "#2a0a52",
-        park: "#3c096c", wood: "#2e0552", sand: "#9d4edd",
-        road_minor: "#5a189a", road_minor_casing: "#3c096c",
-        road_major: "#9d4edd", road_major_casing: "#7b2cbf",
-        road_highway: "#c77dff", road_highway_casing: "#9d4edd",
-        railway: "#8a5cb8", boundary: "#f72585",
-        waterLabel: "#e0aaff", ink: "#e0aaff", muted: "#c77dff", halo: "#10002b",
-      }),
-    },
     night: {
       name: "Night", base: "dark", sprite: SPRITE_DARK,
       // Darkest theme — earth near-black, water a deep navy that reads as moonlit.
@@ -346,8 +488,7 @@
     { from: 7,  phase: "morning" },
     { from: 12, phase: "afternoon" },
     { from: 17, phase: "evening" },
-    { from: 20, phase: "dusk" },
-    { from: 22, phase: "night" },
+    { from: 21, phase: "night" },
   ];
 
   function nycHour() {
@@ -441,7 +582,7 @@
   }
 
   // ---- Render swatches ------------------------------------------------------
-  const order = ["dawn","morning","afternoon","evening","dusk","night"];
+  const order = ["dawn","morning","afternoon","evening","night"];
   const sw = document.getElementById("swatches");
   for (const key of order) {
     const t = themes[key];
@@ -1162,6 +1303,63 @@
 
   updateCloud();
   setInterval(updateCloud, 15 * 60_000);
+
+  import { createLocationSearch } from "./js/search.js";
+  import { route, classifyError, ensureReady } from "./js/router.js";
+  import { renderItinerary, clearItinerary } from "./js/render.js";
+
+  // Single destination marker — overwritten each time a new place is picked.
+  let destMarker = null;
+  function setDestMarker(lon, lat) {
+    if (destMarker) destMarker.remove();
+    const el = document.createElement("div");
+    el.className = "loc-pin";
+    destMarker = new maplibregl.Marker({ element: el, anchor: "center" })
+      .setLngLat([lon, lat])
+      .addTo(map);
+  }
+  function clearDestMarker() {
+    if (destMarker) { destMarker.remove(); destMarker = null; }
+  }
+
+  const search = createLocationSearch({
+    onLocate({ lon, lat }) {
+      setDestMarker(lon, lat);
+      map.flyTo({ center: [lon, lat], zoom: Math.max(map.getZoom(), 14), duration: 700 });
+    },
+    async onRoute(from, to) {
+      try {
+        const itin = await route({ from, to });
+        renderItinerary(map, itin);
+        const minutes = Math.round((itin.arrive - itin.depart) / 60);
+        const meters = itin.legs.reduce((a, l) => a + (l.kind === "Walk" ? l.meters : 0), 0);
+        search.showRouteSummary({ minutes, kilometers: meters / 1000 });
+      } catch (e) {
+        const code = classifyError(e);
+        if (code === "origin outside service area")
+          search.setError("Origin is outside the service area.");
+        else if (code === "destination outside service area")
+          search.setError("Destination is outside the service area.");
+        else if (code === "no path found")
+          search.setError("No walking route found.");
+        else
+          search.setError("Routing failed — see console.");
+        console.error(e);
+      }
+    },
+    onClear() {
+      clearItinerary(map);
+      clearDestMarker();
+    },
+  });
+
+  // Warm the WASM engine after the user shows intent (typed something into the
+  // primary search). Avoids a cold start when they later click "Directions from…".
+  document.getElementById("loc-input").addEventListener(
+    "input",
+    () => ensureReady().catch((e) => console.warn("router pre-warm failed:", e)),
+    { once: true }
+  );
 </script>
 </body>
 </html>

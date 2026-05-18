@@ -1,0 +1,31 @@
+# Golden routes for walking-only (Plan A).
+# Coordinates use the tiny_walk.bin fixture (4-node Union Sq grid).
+# N0=(-73.9904, 40.7359)  N1=(-73.9892, 40.7359)
+# N2=(-73.9880, 40.7359)  N3=(-73.9880, 40.7350)
+
+[[case]]
+name = "n0_to_n2_via_n1"
+from = [-73.9904, 40.7359]
+to   = [-73.9880, 40.7359]
+expected_legs = ["Walk"]
+expected_polyline_len = 3
+expected_seconds_min = 140
+expected_seconds_max = 160
+
+[[case]]
+name = "n0_to_n3_corner"
+from = [-73.9904, 40.7359]
+to   = [-73.9880, 40.7350]
+expected_legs = ["Walk"]
+expected_polyline_len = 4
+expected_seconds_min = 210
+expected_seconds_max = 240
+
+[[case]]
+name = "same_point"
+from = [-73.9904, 40.7359]
+to   = [-73.9904, 40.7359]
+expected_legs = ["Walk"]
+expected_polyline_len = 1
+expected_seconds_min = 0
+expected_seconds_max = 0
