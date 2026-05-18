@@ -1,117 +1,177 @@
-// Search bar controller: debounced typeahead per input, fires onRoute when both pins are set.
+// Location-first search with progressive disclosure of directions.
 //
-// Public API:
-//   const ctl = createSearch({ onRoute(from, to) });
-//   ctl.setError(msg) / ctl.setStatus(msg) / ctl.reset()
-//   ctl.previewPoint('from'|'to', {lon,lat,label}) — set externally (e.g., map click)
+// State machine:
+//   IDLE         → user types in #loc-input → typeahead
+//   DEST_PINNED  → after picking a result → caller's onLocate flies map there,
+//                  destination chip + "Directions from…" button appear
+//   FROM_PROMPT  → user clicked "Directions from…" → #from-input revealed
+//   ROUTING      → user picked a from → caller's onRoute(from, to) fires
+//   ROUTED       → caller called showRouteSummary({ minutes, kilometers });
+//                  the controller shows it with a Clear button
+//
+// All map / WASM work happens in the caller via the onLocate / onRoute / onClear
+// callbacks; this module is pure UI state.
 
 import { geocode } from "./geocode.js";
 
 const DEBOUNCE_MS = 250;
 
-export function createSearch({ onRoute }) {
-  const fromEl = document.getElementById("from-input");
-  const toEl = document.getElementById("to-input");
-  const goBtn = document.getElementById("go-btn");
-  const swapBtn = document.getElementById("swap-btn");
-  const dropdown = document.getElementById("search-dropdown");
-  const statusEl = document.getElementById("search-status");
+export function createLocationSearch({ onLocate, onRoute, onClear }) {
+  const root = document.getElementById("loc");
+  const locInput = document.getElementById("loc-input");
+  const locDropdown = document.getElementById("loc-dropdown");
 
-  /** @type {{from: ?{lon:number,lat:number,label:string}, to: ?…}} */
-  const pins = { from: null, to: null };
-  let activeInput = null; // 'from' | 'to'
-  let debounceTimer = null;
-  let pendingAbort = null;
+  const destPanel = document.getElementById("loc-dest");
+  const destLabel = document.getElementById("loc-dest-label");
+  const dirBtn = document.getElementById("loc-dir-btn");
 
-  function refreshGo() {
-    goBtn.disabled = !(pins.from && pins.to);
-  }
-  function setStatus(msg) { statusEl.textContent = msg; statusEl.classList.remove("error"); }
-  function setError(msg) { statusEl.textContent = msg; statusEl.classList.add("error"); }
+  const fromPanel = document.getElementById("loc-from");
+  const fromInput = document.getElementById("from-input");
+  const fromDropdown = document.getElementById("from-dropdown");
 
-  function hideDropdown() { dropdown.hidden = true; dropdown.innerHTML = ""; }
-  function showResults(results) {
-    if (!results.length) {
-      dropdown.innerHTML = `<div class="search-result" style="color:var(--muted)">No matches</div>`;
-      dropdown.hidden = false;
-      return;
-    }
-    dropdown.innerHTML = results.map((r, i) =>
-      `<div class="search-result" data-i="${i}">${escapeHtml(r.label)}</div>`
-    ).join("");
-    dropdown.hidden = false;
-    dropdown.querySelectorAll(".search-result").forEach((el) => {
-      el.addEventListener("mousedown", (e) => {
-        e.preventDefault();
-        const r = results[Number(el.dataset.i)];
-        selectResult(r);
-      });
-    });
-  }
-  function selectResult(r) {
-    if (!activeInput) return;
-    pins[activeInput] = r;
-    const el = activeInput === "from" ? fromEl : toEl;
-    el.value = r.label;
-    hideDropdown();
-    refreshGo();
-    setStatus("");
-  }
+  const routePanel = document.getElementById("loc-route");
+  const routeSummary = document.getElementById("loc-route-summary");
+  const clearBtn = document.getElementById("loc-clear-btn");
 
+  const statusEl = document.getElementById("loc-status");
+
+  /** @type {?{lon:number,lat:number,label:string}} */
+  let pinnedDest = null;
+  /** @type {?{lon:number,lat:number,label:string}} */
+  let pinnedFrom = null;
+
+  // ---------- helpers ----------
   function escapeHtml(s) {
     return s.replace(/[&<>"']/g, (c) =>
       ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" })[c]);
   }
+  function setStatus(msg) {
+    statusEl.textContent = msg || "";
+    statusEl.classList.remove("error");
+    statusEl.hidden = !msg;
+  }
+  function setError(msg) {
+    statusEl.textContent = msg;
+    statusEl.classList.add("error");
+    statusEl.hidden = false;
+  }
+  function hide(el) { el.hidden = true; el.innerHTML = ""; }
 
-  async function queryFor(which, text) {
-    activeInput = which;
-    pins[which] = null;
-    refreshGo();
-    if (debounceTimer) clearTimeout(debounceTimer);
-    if (!text.trim()) { hideDropdown(); return; }
-    debounceTimer = setTimeout(async () => {
-      if (pendingAbort) pendingAbort.abort();
-      const ctrl = new AbortController();
-      pendingAbort = ctrl;
-      try {
-        const results = await geocode(text, ctrl.signal);
-        if (ctrl.signal.aborted) return;
-        showResults(results);
-      } catch (e) {
-        if (e.name === "AbortError") return;
-        setError("Couldn't search right now — try again");
+  // ---------- per-input typeahead ----------
+  // One factory wires debounce + abort + render into any (input, dropdown, onPick).
+  function attachTypeahead(input, dropdown, onPick) {
+    let debounceTimer = null;
+    let pendingAbort = null;
+
+    function render(results) {
+      if (!results.length) {
+        dropdown.innerHTML = `<div class="loc-result muted">No matches</div>`;
+        dropdown.hidden = false;
+        return;
       }
-    }, DEBOUNCE_MS);
+      dropdown.innerHTML = results.map((r, i) =>
+        `<div class="loc-result" data-i="${i}">${escapeHtml(r.label)}</div>`
+      ).join("");
+      dropdown.hidden = false;
+      dropdown.querySelectorAll(".loc-result[data-i]").forEach((el) => {
+        el.addEventListener("mousedown", (e) => {
+          e.preventDefault();
+          const r = results[Number(el.dataset.i)];
+          input.value = r.label;
+          hide(dropdown);
+          setStatus("");
+          onPick(r);
+        });
+      });
+    }
+
+    input.addEventListener("input", () => {
+      const text = input.value.trim();
+      if (debounceTimer) clearTimeout(debounceTimer);
+      if (!text) { hide(dropdown); return; }
+      debounceTimer = setTimeout(async () => {
+        if (pendingAbort) pendingAbort.abort();
+        const ctrl = new AbortController();
+        pendingAbort = ctrl;
+        try {
+          const results = await geocode(text, ctrl.signal);
+          if (ctrl.signal.aborted) return;
+          render(results);
+        } catch (e) {
+          if (e.name === "AbortError") return;
+          setError("Search unavailable");
+        }
+      }, DEBOUNCE_MS);
+    });
+
+    input.addEventListener("blur", () => setTimeout(() => hide(dropdown), 100));
+    input.addEventListener("focus", () => {
+      if (input.value.trim()) input.select();
+    });
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") { hide(dropdown); input.blur(); }
+    });
   }
 
-  fromEl.addEventListener("input", () => queryFor("from", fromEl.value));
-  toEl.addEventListener("input", () => queryFor("to", toEl.value));
-  fromEl.addEventListener("focus", () => { activeInput = "from"; });
-  toEl.addEventListener("focus", () => { activeInput = "to"; });
-  fromEl.addEventListener("blur", () => setTimeout(hideDropdown, 100));
-  toEl.addEventListener("blur", () => setTimeout(hideDropdown, 100));
+  // ---------- state transitions ----------
+  function showDestPanel() {
+    destLabel.textContent = pinnedDest.label;
+    destPanel.hidden = false;
+    fromPanel.hidden = true;
+    routePanel.hidden = true;
+    fromInput.value = "";
+    pinnedFrom = null;
+  }
+  function showFromPanel() {
+    fromPanel.hidden = false;
+    routePanel.hidden = true;
+    fromInput.focus();
+  }
+  function showRouted() {
+    routePanel.hidden = false;
+  }
+  function resetAll() {
+    locInput.value = "";
+    fromInput.value = "";
+    hide(locDropdown);
+    hide(fromDropdown);
+    destPanel.hidden = true;
+    fromPanel.hidden = true;
+    routePanel.hidden = true;
+    setStatus("");
+    pinnedDest = null;
+    pinnedFrom = null;
+  }
 
-  swapBtn.addEventListener("click", () => {
-    [pins.from, pins.to] = [pins.to, pins.from];
-    [fromEl.value, toEl.value] = [toEl.value, fromEl.value];
-    refreshGo();
+  // ---------- wire inputs ----------
+  attachTypeahead(locInput, locDropdown, (r) => {
+    pinnedDest = r;
+    showDestPanel();
+    onLocate(r);
   });
-  goBtn.addEventListener("click", () => {
-    if (pins.from && pins.to) onRoute(pins.from, pins.to);
+  attachTypeahead(fromInput, fromDropdown, (r) => {
+    pinnedFrom = r;
+    if (pinnedDest) {
+      setStatus("Routing…");
+      onRoute(r, pinnedDest);
+    }
   });
-  [fromEl, toEl].forEach((el) =>
-    el.addEventListener("keydown", (e) => {
-      if (e.key === "Enter" && pins.from && pins.to) onRoute(pins.from, pins.to);
-    })
-  );
+
+  dirBtn.addEventListener("click", showFromPanel);
+  clearBtn.addEventListener("click", () => {
+    resetAll();
+    onClear?.();
+  });
 
   return {
-    setStatus, setError,
-    reset() { pins.from = pins.to = null; fromEl.value = ""; toEl.value = ""; hideDropdown(); refreshGo(); setStatus(""); },
-    previewPoint(which, r) {
-      pins[which] = r;
-      (which === "from" ? fromEl : toEl).value = r.label;
-      refreshGo();
+    setStatus,
+    setError,
+    /** Caller invokes this after `onRoute` resolves, with the rendered itinerary's totals. */
+    showRouteSummary({ minutes, kilometers }) {
+      setStatus("");
+      routeSummary.textContent = `${minutes} min · ${kilometers.toFixed(1)} km walk`;
+      showRouted();
     },
+    reset: resetAll,
   };
 }
