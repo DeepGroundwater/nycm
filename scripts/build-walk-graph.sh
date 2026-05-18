@@ -46,12 +46,12 @@ osmium extract --bbox "$BASEMAP_BBOX" -O -o "$EXTRACT" "$MERGED"
 
 OUT=tiles/walk_graph.bin
 echo "running Python pipeline → $OUT"
-uv run --directory pipelines python walk_graph.py "$EXTRACT" "$(pwd)/$OUT"
+uv run --directory pipelines python walk_graph.py "$(pwd)/$EXTRACT" "$(pwd)/$OUT"
 
 # Sanity: node count should be in the expected range. If grossly off, fail.
 SIZE=$(stat -c%s "$OUT" 2>/dev/null || stat -f%z "$OUT")
 echo "walk_graph.bin size: $SIZE bytes"
-if (( SIZE < 5_000_000 )); then
+if (( SIZE < 5000000 )); then
   echo "ERROR: walk_graph.bin suspiciously small ($SIZE bytes)" >&2
   exit 1
 fi

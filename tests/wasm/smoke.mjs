@@ -18,9 +18,11 @@ await wasmMod.default(wasmBytes);
 const walkBytes = await fs.readFile(path.join(REPO, "tiles/walk_graph.bin"));
 const router = new wasmMod.Router(walkBytes);
 
+// Coordinates pinned to street-adjacent points, NOT the centers of parks/plazas
+// (OSM tags some park-internal paths as separate components from the street network).
 const cases = [
-  { name: "Union Sq → Times Sq",
-    from: { lon: -73.9904, lat: 40.7359 }, to: { lon: -73.9857, lat: 40.7580 } },
+  { name: "14th & Park → Times Sq (Broadway)",
+    from: { lon: -73.9879, lat: 40.7363 }, to: { lon: -73.9871, lat: 40.7589 } },
   { name: "Battery Park → City Hall",
     from: { lon: -74.0150, lat: 40.7033 }, to: { lon: -74.0061, lat: 40.7128 } },
   { name: "Greenpoint → Williamsburg",
