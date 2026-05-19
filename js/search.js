@@ -12,7 +12,7 @@
 // All map / WASM work happens in the caller via the onLocate / onRoute / onClear
 // callbacks; this module is pure UI state.
 
-import { geocode } from "./geocode.js";
+import { searchMerge } from "./search-merge.js";
 
 const DEBOUNCE_MS = 250;
 
@@ -94,7 +94,7 @@ export function createLocationSearch({ onLocate, onRoute, onClear }) {
         const ctrl = new AbortController();
         pendingAbort = ctrl;
         try {
-          const results = await geocode(text, ctrl.signal);
+          const results = await searchMerge(text, ctrl.signal, /* pinnedDest */ null, /* biasLL */ { lon: -73.95, lat: 40.73 });
           if (ctrl.signal.aborted) return;
           render(results);
         } catch (e) {
