@@ -23,9 +23,19 @@ export async function geocode(query, signal) {
   url.searchParams.set("limit", "5");
   url.searchParams.set("lon", String(BIAS_LON));
   url.searchParams.set("lat", String(BIAS_LAT));
+  // Hard clip to US — biggest single ranking improvement; eliminates the
+  // "140 W 25th St → Ontario" failure mode.
+  // (Photon's parameter is singular `countrycode`, not `countrycodes`.)
+  url.searchParams.set("countrycode", "us");
+  // Soft clip to basemap bbox; helps ranking without hard-filtering.
+  url.searchParams.set("bbox", "-74.5,40.3,-72.7,41.4");
   const res = await fetch(url, { signal });
   if (!res.ok) throw new Error(`photon ${res.status}`);
   const json = await res.json();
+  // Defensive: Photon returns 200 with a `{message: "..."}` body when a query
+  // parameter is unknown, instead of an error status. Don't blow up — treat as
+  // empty so the dropdown still renders other lanes.
+  if (!Array.isArray(json?.features)) return [];
   return json.features.map(featureToResult).filter(Boolean);
 }
 
