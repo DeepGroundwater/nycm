@@ -61,3 +61,40 @@ test("geocodeAddress returns [] when result.addressMatches missing", async () =>
   );
   assert.deepEqual(results, []);
 });
+
+test("geocodeAddress retries with ', NY' when bare query is empty", async () => {
+  const captured = [];
+  await withMockFetch(async (url) => {
+    const u = new URL(String(url));
+    const addr = u.searchParams.get("address");
+    captured.push(addr);
+    // First call (bare) returns empty; second (', NY') returns a match.
+    if (addr === "485 W Valley Stream Blvd") {
+      return new Response(JSON.stringify({ result: { addressMatches: [] } }),
+                          { status: 200 });
+    }
+    return new Response(JSON.stringify({
+      result: { addressMatches: [{
+        matchedAddress: "485 W VALLEY STREAM BLVD, VALLEY STREAM, NY, 11580",
+        coordinates: { x: -73.71, y: 40.66 },
+        addressComponents: { state: "NY" },
+      }] },
+    }), { status: 200 });
+  }, async () => {
+    const r = await geocodeAddress("485 W Valley Stream Blvd");
+    assert.equal(r.length, 1);
+    assert.ok(r[0].label.includes("VALLEY STREAM"));
+  });
+  assert.deepEqual(captured.slice(0, 2),
+    ["485 W Valley Stream Blvd", "485 W Valley Stream Blvd, NY"]);
+});
+
+test("geocodeAddress does NOT retry when query already has a state hint", async () => {
+  let calls = 0;
+  await withMockFetch(async () => {
+    calls++;
+    return new Response(JSON.stringify({ result: { addressMatches: [] } }),
+                        { status: 200 });
+  }, () => geocodeAddress("485 W Valley Stream Blvd NY"));
+  assert.equal(calls, 1);
+});
