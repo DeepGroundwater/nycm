@@ -25,5 +25,9 @@ jobs:
         uses: astral-sh/setup-uv@v3
       - name: Assemble walk_graph.bin (needed by walk_graph_reader test)
         run: bash scripts/assemble-walk-graph.sh
+      - name: Install pipeline deps (incl. dev for pytest)
+        run: uv sync --extra dev
+        working-directory: pipelines
       - name: Run pytest
-        run: uv run --directory pipelines pytest -v
+        run: uv run pytest -v
+        working-directory: pipelines
