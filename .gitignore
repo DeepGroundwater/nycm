@@ -15,6 +15,7 @@ Cargo.lock
 
 # Built routing blobs (reassembled from tiles/walk-graph.part-* by CI / dev server)
 tiles/walk_graph.bin
+tiles/pois.bin
 
 # Raw OSM extracts (downloaded by build-walk-graph.sh, not committed)
 pipelines/cache/

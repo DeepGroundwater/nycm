@@ -16,3 +16,18 @@ jobs:
           node-version: "20"
       - name: Run node --test unit tests
         run: node --test tests/unit/**/*.test.mjs
+
+  pipeline-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+      - name: Assemble walk_graph.bin (needed by walk_graph_reader test)
+        run: bash scripts/assemble-walk-graph.sh
+      - name: Install pipeline deps (incl. dev for pytest)
+        run: uv sync --extra dev
+        working-directory: pipelines
+      - name: Run pytest
+        run: uv run pytest -v
+        working-directory: pipelines
