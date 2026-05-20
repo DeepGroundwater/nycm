@@ -29,6 +29,9 @@ jobs:
       - name: Assemble walk_graph.bin from chunks
         run: bash scripts/assemble-walk-graph.sh
 
+      - name: Assemble pois.bin from chunks
+        run: bash scripts/assemble-pois.sh
+
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown
