@@ -38,3 +38,47 @@ test("mergeRank breaks ties with proximity to biasLL", () => {
   ], { lon: -73.9, lat: 40.7 });
   assert.equal(out[0].label, "near");
 });
+
+test("searchMerge: local exact-name beats Photon top hit", async () => {
+  const { searchMerge } = await import("../../../js/search-merge.js");
+  const localStub = async () => [{
+    lon: -74.0, lat: 40.7, label: "Joe's Pizza",
+    score: 110, source: "local", poiId: 1, category: 1, walkNode: 0,
+  }];
+  const photonStub = async () => [{
+    lon: -73.9, lat: 40.8, label: "Joe's Pizza Truck", source: "photon",
+  }];
+  const result = await searchMerge(
+    "Joe's Pizza", new AbortController().signal,
+    null, { lon: -73.95, lat: 40.73 }, 8,
+    { local: localStub, photon: photonStub, census: async () => [] },
+  );
+  assert.equal(result[0].label, "Joe's Pizza");
+  assert.equal(result[0].source, "local");
+});
+
+test("searchMerge: census still beats photon for address queries", async () => {
+  const { searchMerge } = await import("../../../js/search-merge.js");
+  const localStub = async () => [];
+  const photonStub = async () => [{ lon: -73.5, lat: 40.5, label: "Wyandanch", source: "photon" }];
+  const censusStub = async () => [{ lon: -74.0, lat: 40.745, label: "140 W 25th St, NEW YORK, NY", source: "census" }];
+  const result = await searchMerge(
+    "140 W 25th St", new AbortController().signal,
+    null, { lon: -73.95, lat: 40.73 }, 8,
+    { local: localStub, photon: photonStub, census: censusStub },
+  );
+  assert.equal(result[0].source, "census");
+});
+
+test("searchMerge: local lane failure is silent (other lanes still answer)", async () => {
+  const { searchMerge } = await import("../../../js/search-merge.js");
+  const localStub = async () => { throw new Error("simulated index load failure"); };
+  const photonStub = async () => [{ lon: -73.9, lat: 40.7, label: "Photon Hit", source: "photon" }];
+  const result = await searchMerge(
+    "anything", new AbortController().signal,
+    null, { lon: -73.95, lat: 40.73 }, 8,
+    { local: localStub, photon: photonStub, census: async () => [] },
+  );
+  assert.equal(result.length, 1);
+  assert.equal(result[0].label, "Photon Hit");
+});

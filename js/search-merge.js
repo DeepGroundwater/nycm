@@ -1,8 +1,9 @@
 // Orchestrates search lanes. PR 1 wires Photon + Census; PR 3 adds the local
 // POI lane; PR 5 adds the discovery lane.
 
-import { geocode as photon } from "./geocode.js";
-import { geocodeAddress as census, isAddressLike } from "./census.js";
+import { geocode as defaultPhoton } from "./geocode.js";
+import { geocodeAddress as defaultCensus, isAddressLike } from "./census.js";
+import { search as defaultLocal } from "./poi-index.js";
 
 /**
  * Snap a (lon, lat) to a ~50 m grid bucket key. At 40°N:
@@ -51,21 +52,32 @@ export function mergeRank(items, biasLL) {
 }
 
 /**
- * Main entry. PR 1: photon + census only.
+ * Main entry. Three lanes: local POI, Photon, US Census.
  * @param {string} query
  * @param {AbortSignal} signal
- * @param {{lon:number,lat:number}|null} _pinnedDest
+ * @param {{lon:number,lat:number}|null} _pinnedDest  reserved for PR 5 (discovery)
  * @param {{lon:number,lat:number}} biasLL
  * @param {number} [k]
+ * @param {{
+ *   local?: (q:string, k:number) => Promise<any[]>,
+ *   photon?: (q:string, signal:AbortSignal) => Promise<any[]>,
+ *   census?: (q:string, signal:AbortSignal) => Promise<any[]>,
+ * }} [overrides]   for tests
  */
-export async function searchMerge(query, signal, _pinnedDest, biasLL, k = 8) {
-  const photonP = photon(query, signal).catch(() => []);
-  const censusP = isAddressLike(query) ? census(query, signal).catch(() => []) : Promise.resolve([]);
-  const [photonHits, censusHits] = await Promise.all([photonP, censusP]);
+export async function searchMerge(query, signal, _pinnedDest, biasLL, k = 8, overrides = {}) {
+  const localFn    = overrides.local   || defaultLocal;
+  const photonFn   = overrides.photon  || defaultPhoton;
+  const censusFn   = overrides.census  || defaultCensus;
+
+  const localP  = localFn(query, k).catch(() => []);
+  const photonP = photonFn(query, signal).catch(() => []);
+  const censusP = isAddressLike(query) ? censusFn(query, signal).catch(() => []) : Promise.resolve([]);
+  const [localHits, photonHits, censusHits] = await Promise.all([localP, photonP, censusP]);
 
   const all = [
+    ...localHits.map((r) => ({ ...r, baseScore: r.score })),
     ...censusHits.map((r) => ({ ...r, baseScore: 78 })),
-    ...photonHits.map((r, i) => ({ ...r, baseScore: Math.max(30, 62 - i * 4), source: "photon" })),
+    ...photonHits.map((r, i) => ({ ...r, baseScore: Math.max(30, 62 - i * 4), source: r.source ?? "photon" })),
   ];
   return mergeRank(all, biasLL).slice(0, k);
 }
