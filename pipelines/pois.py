@@ -20,8 +20,15 @@ from pathlib import Path
 
 import osmium
 
-from pipelines.poi_emit import POI, write_poi_blob
-from pipelines.walk_graph_reader import WalkGraphReader
+# Dual-import: package-style for pytest (runs from repo root with pipelines/
+# on sys.path), sibling-style for direct script invocation matching the
+# walk_graph.py convention (`uv run --directory pipelines python pois.py ...`).
+try:
+    from pipelines.poi_emit import POI, write_poi_blob
+    from pipelines.walk_graph_reader import WalkGraphReader
+except ImportError:
+    from poi_emit import POI, write_poi_blob
+    from walk_graph_reader import WalkGraphReader
 
 
 # Category code constants. Order = priority (lower wins on multi-tagged POIs).
