@@ -93,6 +93,23 @@
     color: var(--muted); font-variant-numeric: tabular-nums; letter-spacing: 0.02em;
   }
 
+  .flood { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--chip-border); max-width: 240px; }
+  .flood-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+  .flood-place { font-size: 12px; font-weight: 600; }
+  .flood-level { font-size: 12px; font-variant-numeric: tabular-nums; color: var(--muted); }
+  .flood-level b { font-size: 17px; font-weight: 650; color: var(--ink); letter-spacing: -0.01em; }
+  .flood-level span { margin-left: 4px; font-size: 10.5px; }
+  .flood-range { width: 100%; margin: 8px 0 0; accent-color: #3f7fcf; touch-action: pan-y; }
+  .flood-scale, .ramp-labels {
+    display: flex; justify-content: space-between;
+    font-size: 9.5px; font-weight: 600; letter-spacing: 0.04em; color: var(--muted); font-style: normal;
+  }
+  .ramp-labels i { font-style: normal; }
+  .flood-stat { margin-top: 8px; font-size: 11.5px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .flood-legend { margin-top: 8px; display: grid; gap: 6px; }
+  .ramp { display: block; height: 7px; border-radius: 4px; border: 1px solid var(--chip-border); }
+  .flood-note { margin-top: 8px; font-size: 10px; line-height: 1.35; color: var(--muted); }
+
   .swatches { margin-top: 8px; display: flex; gap: 4px; }
   .swatch {
     width: 16px; height: 16px; padding: 0; background: var(--hero);
@@ -258,8 +275,25 @@
   <div class="toggles" role="group" aria-label="Live transit overlays">
     <button class="toggle" id="toggleSubway" style="--dot:#0039A6" aria-pressed="false">Subway</button>
     <button class="toggle" id="toggleRail"   style="--dot:#00985F" aria-pressed="false">Rail</button>
+    <button class="toggle" id="toggleFlood"  style="--dot:#3f7fcf" aria-pressed="false">Flood</button>
   </div>
   <div class="live-status" id="liveStatus" hidden>—</div>
+
+  <div class="flood" id="flood" hidden>
+    <div class="flood-head">
+      <span class="flood-place" id="floodPlace">Long Beach</span>
+      <span class="flood-level"><b id="floodFt">6.5</b> ft <span id="floodM">1.98 m</span></span>
+    </div>
+    <input class="flood-range" id="floodRange" type="range" min="0" max="14" step="0.25" value="6.5"
+           aria-label="Still-water level in feet, NAVD88" />
+    <div class="flood-scale"><span>0</span><span>water level, ft NAVD88</span><span>14</span></div>
+    <div class="flood-stat" id="floodStat">—</div>
+    <div class="flood-legend">
+      <div><span class="ramp" id="rampElev"></span><span class="ramp-labels"><i>3 ft</i><i>ground</i><i>15+</i></span></div>
+      <div><span class="ramp" id="rampDepth"></span><span class="ramp-labels"><i>0 ft</i><i>water depth</i><i>8+</i></span></div>
+    </div>
+    <div class="flood-note" id="floodNote">Still water only — no waves, flow or drainage.</div>
+  </div>
 
   <div class="loc" id="loc">
     <div class="loc-input-wrap">
@@ -1389,6 +1423,56 @@
 
   updateCloud();
   setInterval(updateCloud, 15 * 60_000);
+
+  // ---- Flood view (3DEP lidar elevation × buildings) ------------------------
+  import { createFlood, ftToM, mToFt, ELEV_RAMP, DEPTH_RAMP } from "./js/flood.js";
+  const floodEl = document.getElementById("flood");
+  const floodBtn = document.getElementById("toggleFlood");
+  const floodRange = document.getElementById("floodRange");
+  const gradient = stops => `linear-gradient(to right, ${stops.map(([, c]) => c).join(", ")})`;
+  document.getElementById("rampElev").style.background = gradient(ELEV_RAMP);
+  document.getElementById("rampDepth").style.background = gradient(DEPTH_RAMP);
+
+  const flood = createFlood(map, maplibregl, {
+    onChange({ wet, total, meta }) {
+      const pct = total ? Math.round(100 * wet / total) : 0;
+      document.getElementById("floodStat").textContent =
+        `${wet.toLocaleString()} of ${total.toLocaleString()} buildings reached (${pct}%)`;
+      document.getElementById("floodPlace").textContent = meta.name.split(",")[0];
+      document.getElementById("floodNote").textContent =
+        `Still water only — no waves, flow or drainage. Ground: ${meta.source.split(",")[0]}, 2024 lidar.`;
+    },
+  });
+  function syncFloodLevel() {
+    const ft = Number(floodRange.value);
+    document.getElementById("floodFt").textContent = ft.toFixed(ft % 1 ? 2 : 1).replace(/\.?0+$/, "") || "0";
+    document.getElementById("floodM").textContent = `${ftToM(ft).toFixed(2)} m`;
+    flood.setLevel(ftToM(ft));
+  }
+  let floodRAF = 0;
+  floodRange.addEventListener("input", () => {
+    cancelAnimationFrame(floodRAF);
+    floodRAF = requestAnimationFrame(syncFloodLevel);
+  });
+  floodBtn.addEventListener("click", async () => {
+    const on = !floodBtn.classList.contains("on");
+    floodBtn.classList.toggle("on", on);
+    floodBtn.setAttribute("aria-pressed", String(on));
+    floodEl.hidden = !on;
+    if (!on) { flood.disable(); return; }
+    floodBtn.classList.add("loading");
+    try {
+      await flood.enable();
+      syncFloodLevel();
+      // The dataset covers one barrier island; go there unless already looking at it.
+      if (!flood.contains(map.getCenter())) map.flyTo({ ...flood.view(), duration: 1600 });
+    } catch (err) {
+      console.error("[flood]", err);
+      document.getElementById("floodStat").textContent = "Couldn't load the elevation data.";
+    } finally {
+      floodBtn.classList.remove("loading");
+    }
+  });
 
   import { createLocationSearch } from "./js/search.js";
   import { route, classifyError, ensureReady } from "./js/router.js";

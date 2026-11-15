@@ -1,0 +1,37 @@
+{
+  "name": "Long Beach, NY",
+  "bbox": [
+    -73.745,
+    40.573,
+    -73.572,
+    40.613
+  ],
+  "dem": {
+    "url": "long-beach-dem.png",
+    "width": 3656,
+    "height": 1113,
+    "cell_m": 4.0,
+    "land_fraction": 0.43755615453728663,
+    "sheltered_fraction_of_land": 0.05248664399103159,
+    "offset_m": 20.0,
+    "scale": 100,
+    "sill_step_m": 0.02,
+    "sea_below_m": 0.5
+  },
+  "buildings": {
+    "url": "long-beach-buildings.geojson",
+    "count": 5449,
+    "with_osm_height": 308,
+    "sheltered": 243,
+    "lo_percentiles_m": {
+      "5": 1.48,
+      "25": 1.97,
+      "50": 2.38,
+      "75": 2.84,
+      "95": 6.19
+    }
+  },
+  "vertical_datum": "NAVD88",
+  "units": "m",
+  "source": "USGS 3DEP 1 m DEM, project NY_LongIsland_A24 (lidar flown 24 Mar - 16 Apr 2024)"
+}
