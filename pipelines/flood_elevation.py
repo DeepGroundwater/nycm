@@ -81,7 +81,71 @@ def load_mosaic(paths: list[str], bbox: tuple[float, float, float, float]):
     return dem, tf, crs
 
 
-def write_grid(dem, tf, crs, bbox, cell_m: float, out_png: Path, sea_below: float = SEA_BELOW_M):
+def encode_grid(elev, sea, fill):
+    """Pack ground + sill into an (h, w, 3) uint8 array — see the module docstring.
+
+    Decoding (js/flood.js): elev = q / 100 - OFFSET_M, reach = elev + B * SILL_STEP_M.
+    """
+    ground = np.where(sea, 0, elev)
+    q = np.clip(np.round((ground + OFFSET_M) * 100), 1, 65535).astype("uint16")
+    q[sea] = 0                      # 0 is reserved for sea; land is clipped to >= 1
+    sill = np.clip(np.round((fill - ground) / SILL_STEP_M), 0, 255).astype("uint8")
+    sill[sea] = 0
+    rgb = np.zeros((*elev.shape, 3), dtype="uint8")
+    rgb[..., 0] = q >> 8
+    rgb[..., 1] = q & 255
+    rgb[..., 2] = sill
+    return rgb
+
+
+def basemap_land(pmtiles_path: str, bbox, shape, dst_tf, z: int = 14):
+    """Rasterise the basemap's own land polygons (`earth` layer) onto the grid.
+
+    The lidar reaches further seaward than the map's coastline (it was flown
+    near low tide), which would paint "flood" on what the map already draws as
+    ocean. Clipping to the basemap's land keeps the two shorelines identical.
+    """
+    n = 2 ** z
+    world = 2 * math.pi * R_MERC
+    shapes = []
+    with open(pmtiles_path, "rb") as f:
+        reader = Reader(MmapSource(f))
+        xs, ys = tile_range(bbox, z)
+        for x in xs:
+            for y in ys:
+                raw = reader.get(z, x, y)
+                if not raw:
+                    continue
+                if raw[:2] == b"\x1f\x8b":
+                    raw = gzip.decompress(raw)
+                layer = mapbox_vector_tile.decode(raw, default_options={"y_coord_down": True}).get("earth")
+                if not layer:
+                    continue
+                ext = layer["extent"]
+
+                def to_merc(a, x=x, y=y, ext=ext):
+                    return np.column_stack(((x + a[:, 0] / ext) / n * world - world / 2,
+                                            world / 2 - (y + a[:, 1] / ext) / n * world))
+
+                for feat in layer["features"]:
+                    geom = shape_of(feat["geometry"])
+                    if geom is not None:
+                        shapes.append(mapping(shapely.transform(geom, to_merc)))
+    if not shapes:
+        return np.ones(shape, dtype=bool)
+    return features.rasterize(shapes, out_shape=shape, transform=dst_tf, fill=0, default_value=1,
+                              all_touched=False, dtype="uint8").astype(bool)
+
+
+def shape_of(geometry):
+    if geometry["type"] not in ("Polygon", "MultiPolygon"):
+        return None
+    geom = shape(geometry)
+    return geom if geom.is_valid else geom.buffer(0)
+
+
+def write_grid(dem, tf, crs, bbox, cell_m: float, out_png: Path, sea_below: float = SEA_BELOW_M,
+               pmtiles_path: str | None = None):
     """Average the 1 m DEM onto a Web-Mercator grid and encode it as a PNG."""
     x0, y0 = merc(bbox[0], bbox[1])
     x1, y1 = merc(bbox[2], bbox[3])
@@ -96,17 +160,14 @@ def write_grid(dem, tf, crs, bbox, cell_m: float, out_png: Path, sea_below: floa
         dst_transform=dst_tf, dst_crs="EPSG:3857", dst_nodata=np.nan,
         resampling=Resampling.average,
     )
-    # Sea = no data (open ocean) or ground below the tidal threshold.
+    # Sea = no data (open ocean), ground below the tidal threshold, or anything
+    # the basemap itself draws as water.
     sea = np.isnan(dst) | (dst < sea_below)
+    if pmtiles_path:
+        sea |= ~basemap_land(pmtiles_path, bbox, dst.shape, dst_tf)
     fill = connected_fill(dst, sea)
-    q = np.clip(np.round((np.where(sea, 0, dst) + OFFSET_M) * 100), 1, 65535).astype("uint16")
-    q[sea] = 0
-    sill = np.clip(np.round((fill - np.where(sea, 0, dst)) / SILL_STEP_M), 0, 255).astype("uint8")
-    sill[sea] = 0
-    rgb = np.zeros((h, w, 3), dtype="uint8")
-    rgb[..., 0] = q >> 8
-    rgb[..., 1] = q & 255
-    rgb[..., 2] = sill
+    rgb = encode_grid(dst, sea, fill)
+    sill = rgb[..., 2]
     Image.fromarray(rgb, "RGB").save(out_png, optimize=True)
     info = {"width": w, "height": h, "cell_m": cell_m, "land_fraction": float((~sea).mean()),
             "sheltered_fraction_of_land": float((sill[~sea] > 5).mean())}
@@ -258,7 +319,7 @@ def main() -> None:
     prefix = Path(a.out)
 
     dem, tf, crs = load_mosaic(a.dem, bbox)
-    grid, fill, fill_tf = write_grid(dem, tf, crs, bbox, a.cell, prefix.with_name(prefix.name + "-dem.png"), a.sea_below)
+    grid, fill, fill_tf = write_grid(dem, tf, crs, bbox, a.cell, prefix.with_name(prefix.name + "-dem.png"), a.sea_below, a.pmtiles)
     feats, skipped = building_elevations(dem, tf, crs, bbox, a.pmtiles, fill, fill_tf)
     fc = {"type": "FeatureCollection", "features": feats}
     prefix.with_name(prefix.name + "-buildings.geojson").write_text(json.dumps(fc, separators=(",", ":")))

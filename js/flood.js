@@ -18,6 +18,53 @@ const WATER_SHALLOW = [122, 182, 236], WATER_DEEP = [28, 84, 170];
 
 const SRC_WATER = "flood-water", SRC_BLDG = "flood-buildings";
 
+// ---- Pure maths (unit-tested in tests/unit/flood) ----------------------------
+
+/**
+ * Unpack the terrain PNG's RGBA bytes (see pipelines/flood_elevation.py).
+ * @returns {{elev: Float32Array, reach: Float32Array}}
+ *   elev  — ground, m NAVD88; NaN for sea
+ *   reach — the lowest water level at which the sea gets to this cell (>= elev)
+ */
+export function decodeGrid(px, { offset_m, scale, sill_step_m }) {
+  const n = px.length / 4;
+  const elev = new Float32Array(n), reach = new Float32Array(n);
+  for (let i = 0, p = 0; i < n; i++, p += 4) {
+    const q = (px[p] << 8) | px[p + 1];
+    if (q === 0) { elev[i] = NaN; reach[i] = NaN; continue; }
+    elev[i] = q / scale - offset_m;
+    reach[i] = elev[i] + px[p + 2] * sill_step_m;
+  }
+  return { elev, reach };
+}
+
+/** A cell is wet when the water is above the level at which the sea reaches it. */
+export const isWet = (reach, level) => reach < level;   // false for NaN (sea)
+
+/**
+ * Paint every wet cell into RGBA bytes, shaded by depth. Returns the wet cell count.
+ */
+export function paintFlood(elev, reach, level, rgba) {
+  let wet = 0;
+  for (let i = 0, p = 0; i < elev.length; i++, p += 4) {
+    if (!isWet(reach[i], level)) { rgba[p + 3] = 0; continue; }
+    const t = Math.min(1, (level - elev[i]) / 2.5);
+    rgba[p] = WATER_SHALLOW[0] + (WATER_DEEP[0] - WATER_SHALLOW[0]) * t;
+    rgba[p + 1] = WATER_SHALLOW[1] + (WATER_DEEP[1] - WATER_SHALLOW[1]) * t;
+    rgba[p + 2] = WATER_SHALLOW[2] + (WATER_DEEP[2] - WATER_SHALLOW[2]) * t;
+    rgba[p + 3] = 150 + 70 * t;
+    wet++;
+  }
+  return wet;
+}
+
+/** Buildings the sea has reached: strictly above each one's threshold `w`. */
+export function countReached(thresholds, level) {
+  let n = 0;
+  for (let i = 0; i < thresholds.length; i++) if (level > thresholds[i]) n++;
+  return n;
+}
+
 export function createFlood(map, maplibregl, { metaUrl = "data/long-beach-flood.json", onChange = () => {} } = {}) {
   let meta = null, elev = null, reach = null, canvas = null, ctx = null, image = null;
   let buildings = null, bReach = null;
@@ -33,18 +80,11 @@ export function createFlood(map, maplibregl, { metaUrl = "data/long-beach-flood.
           .then(b => createImageBitmap(b, { colorSpaceConversion: "none", premultiplyAlpha: "none" })),
         fetch(new URL(meta.buildings.url, base)).then(r => r.json()),
       ]);
-      const { width: w, height: h, offset_m, scale, sill_step_m } = meta.dem;
+      const { width: w, height: h } = meta.dem;
       const tmp = new OffscreenCanvas(w, h).getContext("2d", { willReadFrequently: true });
       tmp.drawImage(bmp, 0, 0);
       const px = tmp.getImageData(0, 0, w, h).data;
-      // elev: ground (m NAVD88), NaN for sea. reach: level at which the sea gets there.
-      elev = new Float32Array(w * h); reach = new Float32Array(w * h);
-      for (let i = 0, p = 0; i < elev.length; i++, p += 4) {
-        const q = (px[p] << 8) | px[p + 1];
-        if (q === 0) { elev[i] = NaN; reach[i] = NaN; continue; }
-        elev[i] = q / scale - offset_m;
-        reach[i] = elev[i] + px[p + 2] * sill_step_m;
-      }
+      ({ elev, reach } = decodeGrid(px, meta.dem));
       canvas = document.createElement("canvas");
       canvas.width = w; canvas.height = h;
       ctx = canvas.getContext("2d");
@@ -57,17 +97,7 @@ export function createFlood(map, maplibregl, { metaUrl = "data/long-beach-flood.
 
   // One pass over the grid: paint every cell the sea reaches at this level.
   function paintWater() {
-    const d = image.data;
-    let wet = 0;
-    for (let i = 0, p = 0; i < elev.length; i++, p += 4) {
-      if (!(reach[i] < level)) { d[p + 3] = 0; continue; }   // also skips NaN (sea)
-      const t = Math.min(1, (level - elev[i]) / 2.5);
-      d[p] = WATER_SHALLOW[0] + (WATER_DEEP[0] - WATER_SHALLOW[0]) * t;
-      d[p + 1] = WATER_SHALLOW[1] + (WATER_DEEP[1] - WATER_SHALLOW[1]) * t;
-      d[p + 2] = WATER_SHALLOW[2] + (WATER_DEEP[2] - WATER_SHALLOW[2]) * t;
-      d[p + 3] = 150 + 70 * t;
-      wet++;
-    }
+    const wet = paintFlood(elev, reach, level, image.data);
     ctx.putImageData(image, 0, 0);
     const src = map.getSource(SRC_WATER);
     if (src) {
@@ -87,8 +117,7 @@ export function createFlood(map, maplibregl, { metaUrl = "data/long-beach-flood.
   }
 
   function stats(areaM2) {
-    let wet = 0;
-    for (let i = 0; i < bReach.length; i++) if (bReach[i] < level) wet++;
+    const wet = countReached(bReach, level);
     return { level, wet, total: bReach.length, floodedKm2: areaM2 / 1e6, meta };
   }
 
