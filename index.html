@@ -143,6 +143,7 @@
   .flood-stat { margin-top: 8px; font-size: 11.5px; font-weight: 600; font-variant-numeric: tabular-nums; }
   .flood-legend { margin-top: 8px; display: grid; gap: 6px; }
   .ramp { display: block; height: 7px; border-radius: 4px; border: 1px solid var(--chip-border); }
+  .ramp-near { background: linear-gradient(to right, #e26e1c 0 33.3%, #eea034 33.3% 66.6%, #f4c868 66.6% 100%); opacity: 0.85; }
   .flood-note { margin-top: 8px; font-size: 10px; line-height: 1.35; color: var(--muted); }
 
   .swatches { margin-top: 8px; display: flex; gap: 4px; }
@@ -328,7 +329,7 @@
       <span class="tide-datum">ft above MLLW</span>
     </div>
     <div id="surgeWrap" hidden>
-      <div class="tide-row"><label class="tide-surge" for="surgeRange">Surge on top of the Long Beach tide <b id="surgeFt">+0 ft</b></label></div>
+      <div class="tide-row"><label class="tide-surge" for="surgeRange"><span id="surgeLabel">Surge on top of the tide</span> <b id="surgeFt">+0 ft</b></label></div>
       <input class="flood-range surge-range" id="surgeRange" type="range" min="0" max="12" step="0.25" value="0"
              aria-label="Storm surge added on top of the predicted tide, in feet" />
     </div>
@@ -347,8 +348,8 @@
 
     <div class="flood-stat" id="floodStat">—</div>
     <div class="flood-legend">
-      <div><span class="ramp" id="rampElev"></span><span class="ramp-labels"><i>3 ft</i><i>ground</i><i>15+</i></span></div>
       <div><span class="ramp" id="rampDepth"></span><span class="ramp-labels"><i>0 ft</i><i>water depth</i><i>8+</i></span></div>
+      <div><span class="ramp ramp-near"></span><span class="ramp-labels"><i>1 ft</i><i>nearly under: ft left</i><i>3</i></span></div>
     </div>
     <div class="flood-note" id="floodNote">Still water only — no waves, flow or drainage.</div>
   </div>
@@ -1483,13 +1484,12 @@
   setInterval(updateCloud, 15 * 60_000);
 
   // ---- Flood view (3DEP lidar elevation × buildings) ------------------------
-  import { createFlood, ftToM, mToFt, ELEV_RAMP, DEPTH_RAMP } from "./js/flood.js";
-  import { tideNavd, datumNavd, covers, stationPredictor } from "./js/tide.js";
+  import { createFlood, ftToM, mToFt, DEPTH_RAMP } from "./js/flood.js";
+  import { tideMsl, datumNavd, covers, stationPredictor } from "./js/tide.js";
   const floodEl = document.getElementById("flood");
   const floodBtn = document.getElementById("toggleFlood");
   const floodRange = document.getElementById("floodRange");
   const gradient = stops => `linear-gradient(to right, ${stops.map(([, c]) => c).join(", ")})`;
-  document.getElementById("rampElev").style.background = gradient(ELEV_RAMP);
   document.getElementById("rampDepth").style.background = gradient(DEPTH_RAMP);
 
   const flood = createFlood(map, maplibregl, {
@@ -1568,6 +1568,13 @@
       parent.appendChild(n);
       return n;
     };
+    const shortName = name => title(name).split(",")[0];
+    // The flood follows the selected station when that station has its own
+    // harmonics and sits inside the flooded area; otherwise the Long Beach gauge.
+    function floodSource() {
+      const ok = selected?.kind === "harmonic" && flood.contains({ lng: selected.lng, lat: selected.lat });
+      return ok ? { name: selected.name, table: selected.predict.table } : { name: floodTable.name, table: floodTable };
+    }
     const title = name => name.replace(/\b([A-Z])([A-Z']+)\b/g, (_, a, b) => a + b.toLowerCase());
 
     function draw() {
@@ -1663,7 +1670,11 @@
       const surge = Number(surgeRange.value);
       document.getElementById("surgeFt").textContent = `+${Number(surge.toFixed(2))} ft`;
       el.classList.toggle("idle", floodOn && !driving);
-      if (floodOn && driving) setFloodLevelFt(mToFt(tideNavd(floodTable, time)) + surge, { decimals: 1 });
+      const src = floodSource();
+      document.getElementById("surgeLabel").textContent = `Surge on top of the ${shortName(src.name)} tide`;
+      // Any harmonic table predicts above its own mean sea level; the same NAVD88
+      // tie is assumed for all of them (see data/long-beach-tide.json).
+      if (floodOn && driving) setFloodLevelFt(mToFt(tideMsl(src.table, time) + floodTable.msl_navd88_m) + surge, { decimals: 1 });
     }
     function setTime(ms) {
       time = Math.min(start + SPAN, Math.max(start, ms));
@@ -1751,6 +1762,7 @@
         floodOn = on; driving = false;
         await sync();
         if (!on || !usable()) { document.getElementById("floodMarks").replaceChildren(); return; }
+        flood.setTideRange(datumNavd(floodTable, "LAT") ?? -1.14, datumNavd(floodTable, "HAT") ?? 1.02);
         const mhhw = datumNavd(floodTable, "MHHW"), marks = document.getElementById("floodMarks");
         marks.replaceChildren();
         if (mhhw != null) {

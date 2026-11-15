@@ -313,6 +313,11 @@ def main() -> None:
     ap.add_argument("--cell", type=float, default=4.0, help="grid cell size in ground metres")
     ap.add_argument("--sea-below", type=float, default=SEA_BELOW_M,
                     help="ground below this (m NAVD88) is treated as permanent water (the lidar's flattened water surface)")
+    ap.add_argument("--max-ground", type=float, default=4.6,
+                    help="leave out buildings whose low ground is above this (m NAVD88): the map's "
+                         "slider tops out below it, so they can never be reached and need no elevation")
+    ap.add_argument("--view", default=None,
+                    help="camera for the map's 'take me there': lng,lat,zoom[,pitch[,bearing]]")
     ap.add_argument("--name", default="Long Beach, NY")
     ap.add_argument("--source", default="USGS 3DEP 1 m DEM")
     a = ap.parse_args()
@@ -322,9 +327,15 @@ def main() -> None:
     dem, tf, crs = load_mosaic(a.dem, bbox)
     grid, fill, fill_tf = write_grid(dem, tf, crs, bbox, a.cell, prefix.with_name(prefix.name + "-dem.png"), a.sea_below, a.pmtiles)
     feats, skipped = building_elevations(dem, tf, crs, bbox, a.pmtiles, fill, fill_tf)
+    total = len(feats)
+    feats = [f for f in feats if f["properties"]["lo"] <= a.max_ground]
     fc = {"type": "FeatureCollection", "features": feats}
     prefix.with_name(prefix.name + "-buildings.geojson").write_text(json.dumps(fc, separators=(",", ":")))
 
+    view = None
+    if a.view:
+        v = [float(x) for x in a.view.split(",")]
+        view = {"center": v[:2], "zoom": v[2], "pitch": v[3] if len(v) > 3 else 0, "bearing": v[4] if len(v) > 4 else 0}
     lows = np.array([f["properties"]["lo"] for f in feats])
     reach = np.array([f["properties"]["w"] for f in feats])
     meta = {
@@ -332,10 +343,11 @@ def main() -> None:
         "bbox": bbox,
         "dem": {"url": prefix.name + "-dem.png", **grid, "offset_m": OFFSET_M, "scale": 100,
                 "sill_step_m": SILL_STEP_M, "sea_below_m": a.sea_below},
-        "buildings": {"url": prefix.name + "-buildings.geojson", "count": len(feats),
+        "buildings": {"url": prefix.name + "-buildings.geojson", "count": len(feats), "count_total": total, "max_ground_m": a.max_ground,
                       "with_osm_height": sum("h" in f["properties"] for f in feats),
                       "sheltered": int((reach > lows + 0.1).sum()),
                       "lo_percentiles_m": {str(p): round(float(np.percentile(lows, p)), 2) for p in (5, 25, 50, 75, 95)}},
+        **({"view": view} if view else {}),
         "vertical_datum": "NAVD88",
         "units": "m",
         "source": a.source,
