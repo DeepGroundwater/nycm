@@ -83,3 +83,69 @@ export function series(table, startMs, endMs, n = 200) {
   }
   return out;
 }
+
+// ---- Many stations (data/nassau-tides.json) ----------------------------------
+// Tide tables quote heights above MLLW ("chart datum"), which every station
+// has, so the multi-station API works in metres above MLLW.
+
+/** Predicted height in metres above the table's mean lower low water. */
+export const tideMllw = (table, ms) => tideMsl(table, ms) - (table.datums.MLLW ?? 0);
+
+/**
+ * High and low waters at a SUBORDINATE station, in metres above MLLW.
+ * NOAA has no harmonics for these: it takes the reference station's highs and
+ * lows, shifts each in time, and scales (or offsets) its height above MLLW.
+ */
+export function subordinateExtremes(station, refTable, startMs, endMs) {
+  const FT = 0.3048, pad = 6 * 3.6e6;
+  const adjust = (level, o) => station.height === "ratio" ? level * o.height : level + o.height * FT;
+  return extremes(refTable, startMs - pad, endMs + pad)
+    .map(e => {
+      const o = e.type === "H" ? station.high : station.low;
+      return { time: e.time + o.minutes * 60e3, level: adjust(e.level - (refTable.datums.MLLW ?? 0), o), type: e.type };
+    })
+    .filter(e => e.time >= startMs && e.time <= endMs);
+}
+
+/**
+ * Height at `ms` from a list of highs and lows, joined by half-cosines — the
+ * standard way to read between the entries of a tide table. Null outside the list.
+ */
+export function levelBetween(ext, ms) {
+  for (let i = 1; i < ext.length; i++) {
+    const a = ext[i - 1], b = ext[i];
+    if (ms < a.time || ms > b.time) continue;
+    const phase = (ms - a.time) / (b.time - a.time);
+    return a.level + (b.level - a.level) * (1 - Math.cos(Math.PI * phase)) / 2;
+  }
+  return null;
+}
+
+/**
+ * A predictor for one station of a multi-station document.
+ * @returns {{ level(ms): number, extremes(startMs, endMs): object[], table: object|null, harmonic: boolean }}
+ *   levels in metres above MLLW
+ */
+export function stationPredictor(doc, station) {
+  if (station.kind === "harmonic") {
+    const table = doc.tables[station.id];
+    return {
+      harmonic: true, table,
+      level: ms => tideMllw(table, ms),
+      extremes: (a, b) => extremes(table, a, b).map(e => ({ ...e, level: e.level - (table.datums.MLLW ?? 0) })),
+    };
+  }
+  const ref = doc.tables[station.ref];
+  // Cache a window of highs and lows; rebuilt when a request falls outside it.
+  let from = 0, to = 0, ext = [];
+  const ensure = (a, b) => {
+    if (a >= from && b <= to) return;
+    from = a - 12 * 3.6e6; to = b + 60 * 3.6e6;
+    ext = subordinateExtremes(station, ref, from - 14 * 3.6e6, to + 14 * 3.6e6);
+  };
+  return {
+    harmonic: false, table: null,
+    level: ms => { ensure(ms, ms); return levelBetween(ext, ms); },
+    extremes: (a, b) => { ensure(a, b); return ext.filter(e => e.time >= a && e.time <= b); },
+  };
+}

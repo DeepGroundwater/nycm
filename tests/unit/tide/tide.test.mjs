@@ -8,7 +8,7 @@ const table = JSON.parse(readFileSync(new URL("../../../data/long-beach-tide.jso
 // NOAA's own predictions for the same station — the ground truth.
 const noaa = JSON.parse(readFileSync(new URL("./noaa-8516663.json", here)));
 
-test("matches NOAA's hourly predictions to within 1.5 cm, across 2024, 2026 and 2031", () => {
+test("matches NOAA's hourly predictions to within 5 mm, across 2024, 2026 and 2031", () => {
   let worst = 0, sumSq = 0;
   for (const [t, v] of noaa.hourly) {
     const e = tideMsl(table, Date.parse(t)) - v;
@@ -16,14 +16,14 @@ test("matches NOAA's hourly predictions to within 1.5 cm, across 2024, 2026 and 
   }
   const rms = Math.sqrt(sumSq / noaa.hourly.length);
   assert.ok(noaa.hourly.length > 200);
-  assert.ok(worst < 0.015, `worst error ${worst.toFixed(4)} m`);
-  assert.ok(rms < 0.006, `rms error ${rms.toFixed(4)} m`);
+  assert.ok(worst < 0.005, `worst error ${worst.toFixed(4)} m`);
+  assert.ok(rms < 0.002, `rms error ${rms.toFixed(4)} m`);
 });
 
 test("stays accurate at both ends of a year, where the yearly table hands over", () => {
   const edge = noaa.hourly.filter(([t]) => /-(01-0|12-2|12-3)/.test(t));
   assert.ok(edge.length > 20);
-  for (const [t, v] of edge) assert.ok(Math.abs(tideMsl(table, Date.parse(t)) - v) < 0.015, t);
+  for (const [t, v] of edge) assert.ok(Math.abs(tideMsl(table, Date.parse(t)) - v) < 0.005, t);
 });
 
 test("is continuous across New Year", () => {
@@ -34,14 +34,14 @@ test("is continuous across New Year", () => {
   }
 });
 
-test("finds the same high and low waters as NOAA: within 6 minutes and 1.5 cm", () => {
+test("finds the same high and low waters as NOAA: within 2 minutes and 5 mm", () => {
   const start = Date.parse(noaa.hilo[0][0]) - 3.6e6, end = Date.parse(noaa.hilo.at(-1)[0]) + 3.6e6;
   const got = extremes(table, start, end);
   assert.equal(got.length, noaa.hilo.length);
   noaa.hilo.forEach(([t, v, type], i) => {
     assert.equal(got[i].type, type);
-    assert.ok(Math.abs(got[i].time - Date.parse(t)) <= 6 * 60e3, `${t}: off by ${(got[i].time - Date.parse(t)) / 60e3} min`);
-    assert.ok(Math.abs(got[i].level - v) < 0.015);
+    assert.ok(Math.abs(got[i].time - Date.parse(t)) <= 2 * 60e3, `${t}: off by ${(got[i].time - Date.parse(t)) / 60e3} min`);
+    assert.ok(Math.abs(got[i].level - v) < 0.005);
   });
 });
 
