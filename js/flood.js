@@ -68,7 +68,7 @@ export function countReached(thresholds, level) {
 export function createFlood(map, maplibregl, { metaUrl = "data/long-beach-flood.json", onChange = () => {} } = {}) {
   let meta = null, elev = null, reach = null, canvas = null, ctx = null, image = null;
   let buildings = null, bReach = null;
-  let level = 2.0, on = false, loading = null, popup = null;
+  let level = 2.0, on = false, loading = null, popup = null, lastWet = -1;
 
   async function load() {
     if (loading) return loading;
@@ -161,8 +161,14 @@ export function createFlood(map, maplibregl, { metaUrl = "data/long-beach-flood.
   function refresh() {
     if (!on || !elev) return;
     const area = map.getSource(SRC_WATER) ? paintWater() : 0;
-    if (map.getLayer(SRC_BLDG)) map.setPaintProperty(SRC_BLDG, "fill-extrusion-color", buildingColor());
-    onChange(stats(area));
+    // Recolouring 5,000 extrusions is the costly part. At ordinary tide levels
+    // no building is reached before or after the change, so skip it.
+    const st = stats(area);
+    if (map.getLayer(SRC_BLDG) && (st.wet > 0 || lastWet !== 0)) {
+      map.setPaintProperty(SRC_BLDG, "fill-extrusion-color", buildingColor());
+    }
+    lastWet = st.wet;
+    onChange(st);
   }
 
   const fmt = m => `${mToFt(m).toFixed(1)} ft (${m.toFixed(2)} m)`;
@@ -195,7 +201,7 @@ export function createFlood(map, maplibregl, { metaUrl = "data/long-beach-flood.
       ensureLayers();
       refresh();
     },
-    disable() { on = false; removeLayers(); },
+    disable() { on = false; lastWet = -1; removeLayers(); },
     setLevel(m) { level = m; refresh(); },
     /** Camera that shows the dataset, for a "take me there" on enable. */
     view() {

@@ -11,18 +11,18 @@
     "width": 3656,
     "height": 1113,
     "cell_m": 4.0,
-    "land_fraction": 0.43297876105150784,
-    "sheltered_fraction_of_land": 0.050789342541856665,
+    "land_fraction": 0.4857782797690316,
+    "sheltered_fraction_of_land": 0.06845824391635731,
     "offset_m": 20.0,
     "scale": 100,
     "sill_step_m": 0.02,
-    "sea_below_m": 0.5
+    "sea_below_m": -0.3
   },
   "buildings": {
     "url": "long-beach-buildings.geojson",
     "count": 5449,
     "with_osm_height": 308,
-    "sheltered": 243,
+    "sheltered": 245,
     "lo_percentiles_m": {
       "5": 1.48,
       "25": 1.97,

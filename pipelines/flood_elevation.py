@@ -53,11 +53,12 @@ from shapely.geometry import Polygon, mapping, shape
 from skimage.morphology import reconstruction
 
 OFFSET_M = 20.0          # stored value = (elevation + OFFSET) in centimetres
-# Ground below this (m NAVD88) counts as tidal water rather than land: roughly
-# mean high water on this coast. It folds in the hydro-flattened bay surface,
-# the intertidal foreshore the lidar caught at low tide, and low salt marsh.
-# Approximate — set --sea-below from the local tidal datum (NOAA VDatum).
-SEA_BELOW_M = 0.5
+# Ground below this (m NAVD88) counts as permanent water rather than land.
+# 3DEP hydro-flattens tidal water to the surface it saw on the day of the
+# flight (about -0.5 to -0.6 m here), so there is no real ground below that:
+# the threshold sits just above it. Everything higher — foreshore, salt marsh —
+# is genuine lidar ground and is left to wet and dry with the tide.
+SEA_BELOW_M = -0.3
 SILL_STEP_M = 0.02       # resolution of the B-channel sill (max 5.1 m)
 R_MERC = 6378137.0
 
@@ -311,7 +312,7 @@ def main() -> None:
     ap.add_argument("--pmtiles", default="tiles/nyc-metro.pmtiles")
     ap.add_argument("--cell", type=float, default=4.0, help="grid cell size in ground metres")
     ap.add_argument("--sea-below", type=float, default=SEA_BELOW_M,
-                    help="ground below this (m NAVD88) is treated as tidal water, ~mean high water")
+                    help="ground below this (m NAVD88) is treated as permanent water (the lidar's flattened water surface)")
     ap.add_argument("--name", default="Long Beach, NY")
     ap.add_argument("--source", default="USGS 3DEP 1 m DEM")
     a = ap.parse_args()

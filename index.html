@@ -105,6 +105,39 @@
     font-size: 9.5px; font-weight: 600; letter-spacing: 0.04em; color: var(--muted); font-style: normal;
   }
   .ramp-labels i { font-style: normal; }
+  .flood-marks { position: relative; height: 15px; margin: 6px 8px -6px; }
+  .flood-marks i {
+    position: absolute; bottom: 0; transform: translateX(-50%); font-style: normal; white-space: nowrap;
+    font-size: 9px; font-weight: 600; letter-spacing: 0.03em; color: var(--muted);
+    padding-bottom: 5px; background: linear-gradient(var(--muted), var(--muted)) bottom center / 1px 4px no-repeat;
+  }
+  .tide { margin-top: 10px; padding-top: 9px; border-top: 1px dashed var(--chip-border); }
+  .tide-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+  .tide-title { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+  .tide-when { font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; text-align: right; }
+  .tide.idle .tide-when { color: var(--muted); font-weight: 500; }
+  .tide-chart { display: block; width: 100%; height: auto; margin-top: 5px; cursor: ew-resize; touch-action: none; border-radius: 4px; }
+  .tide-chart:focus-visible { outline: 2px solid #3f7fcf; outline-offset: 2px; }
+  .tide-chart .area { fill: #3f7fcf; fill-opacity: 0.16; }
+  .tide-chart .curve { fill: none; stroke: #3f7fcf; stroke-width: 1.4; }
+  .tide-chart .grid { stroke: var(--muted); stroke-opacity: 0.3; stroke-width: 0.6; }
+  .tide-chart .ref { stroke: var(--muted); stroke-opacity: 0.55; stroke-width: 0.6; stroke-dasharray: 2 2; }
+  .tide-chart text { font-size: 7.5px; font-weight: 600; fill: var(--muted); }
+  .tide-chart .ext { fill: var(--chip-bg); stroke: #3f7fcf; stroke-width: 1; }
+  .tide-chart .nowtick { stroke: var(--ink); stroke-width: 0.8; stroke-opacity: 0.5; }
+  .tide-chart .cursor line { stroke: var(--ink); stroke-width: 1; }
+  .tide-chart .cursor circle { fill: #3f7fcf; stroke: var(--chip-bg); stroke-width: 1.5; }
+  .tide.idle .tide-chart .cursor { opacity: 0.35; }
+  .tide-row { display: flex; align-items: center; gap: 6px; margin-top: 7px; }
+  .tide-btn {
+    font: inherit; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em;
+    padding: 3px 8px; border-radius: 999px; border: 1px solid var(--chip-border);
+    background: transparent; color: var(--muted); cursor: pointer;
+  }
+  .tide-btn[aria-pressed="true"] { background: var(--ink); color: var(--earth); border-color: var(--ink); }
+  .tide-surge { margin-left: auto; font-size: 10.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .tide-surge b { color: var(--ink); font-weight: 650; }
+  .surge-range { margin-top: 4px; accent-color: #c8683b; }
   .flood-stat { margin-top: 8px; font-size: 11.5px; font-weight: 600; font-variant-numeric: tabular-nums; }
   .flood-legend { margin-top: 8px; display: grid; gap: 6px; }
   .ramp { display: block; height: 7px; border-radius: 4px; border: 1px solid var(--chip-border); }
@@ -284,9 +317,26 @@
       <span class="flood-place" id="floodPlace">Long Beach</span>
       <span class="flood-level"><b id="floodFt">6.5</b> ft <span id="floodM">1.98 m</span></span>
     </div>
-    <input class="flood-range" id="floodRange" type="range" min="0" max="14" step="0.25" value="6.5"
+    <div class="flood-marks" id="floodMarks" aria-hidden="true"></div>
+    <input class="flood-range" id="floodRange" type="range" min="-3" max="14" step="0.25" value="6.5"
            aria-label="Still-water level in feet, NAVD88" />
-    <div class="flood-scale"><span>0</span><span>water level, ft NAVD88</span><span>14</span></div>
+    <div class="flood-scale"><span>−3</span><span>water level, ft NAVD88</span><span>14</span></div>
+
+    <div class="tide" id="tide" hidden>
+      <div class="tide-head">
+        <span class="tide-title">Tide</span>
+        <span class="tide-when" id="tideWhen">—</span>
+      </div>
+      <svg class="tide-chart" id="tideChart" viewBox="0 0 240 66" role="slider" tabindex="0"
+           aria-label="Predicted tide over 48 hours. Drag, or use the arrow keys, to pick a time."></svg>
+      <div class="tide-row">
+        <button class="tide-btn" id="tideNow" type="button">Now</button>
+        <button class="tide-btn" id="tidePlay" type="button" aria-pressed="false">Play</button>
+        <label class="tide-surge" for="surgeRange">Surge <b id="surgeFt">+0 ft</b></label>
+      </div>
+      <input class="flood-range surge-range" id="surgeRange" type="range" min="0" max="12" step="0.25" value="0"
+             aria-label="Storm surge added on top of the predicted tide, in feet" />
+    </div>
     <div class="flood-stat" id="floodStat">—</div>
     <div class="flood-legend">
       <div><span class="ramp" id="rampElev"></span><span class="ramp-labels"><i>3 ft</i><i>ground</i><i>15+</i></span></div>
@@ -1426,6 +1476,7 @@
 
   // ---- Flood view (3DEP lidar elevation × buildings) ------------------------
   import { createFlood, ftToM, mToFt, ELEV_RAMP, DEPTH_RAMP } from "./js/flood.js";
+  import { tideNavd, datumNavd, covers, extremes, series } from "./js/tide.js";
   const floodEl = document.getElementById("flood");
   const floodBtn = document.getElementById("toggleFlood");
   const floodRange = document.getElementById("floodRange");
@@ -1440,30 +1491,164 @@
         `${wet.toLocaleString()} of ${total.toLocaleString()} buildings reached (${pct}%)`;
       document.getElementById("floodPlace").textContent = meta.name.split(",")[0];
       document.getElementById("floodNote").textContent =
-        `Still water only — no waves, flow or drainage. Ground: ${meta.source.split(",")[0]}, 2024 lidar.`;
+        `Still water only — no waves, flow or drainage. Ground: ${meta.source.split(",")[0]}, 2024 lidar. ` +
+        (tide.table ? `Tide: NOAA prediction, station ${tide.table.station} (bay side); weather not included.` : "");
     },
   });
-  function syncFloodLevel() {
-    const ft = Number(floodRange.value);
-    document.getElementById("floodFt").textContent = ft.toFixed(ft % 1 ? 2 : 1).replace(/\.?0+$/, "") || "0";
-    document.getElementById("floodM").textContent = `${ftToM(ft).toFixed(2)} m`;
+  // The level comes either from the slider (manual) or from the tide clock.
+  function setFloodLevelFt(ft, { fromSlider = false, decimals = null } = {}) {
+    if (!fromSlider) floodRange.value = String(Math.min(14, Math.max(-3, ft)));
+    const shown = decimals == null ? String(Number(ft.toFixed(2))) : ft.toFixed(decimals);
+    document.getElementById("floodFt").textContent = shown.replace("-", "−");
+    document.getElementById("floodM").textContent = `${ftToM(ft).toFixed(2)} m`.replace("-", "−");
     flood.setLevel(ftToM(ft));
   }
   let floodRAF = 0;
   floodRange.addEventListener("input", () => {
+    tide.release();                       // dragging the level by hand leaves tide mode
     cancelAnimationFrame(floodRAF);
-    floodRAF = requestAnimationFrame(syncFloodLevel);
+    floodRAF = requestAnimationFrame(() => setFloodLevelFt(Number(floodRange.value), { fromSlider: true }));
   });
+
+  // ---- Tide clock (NOAA harmonic prediction) --------------------------------
+  // Picks a moment in a 48-hour window; the water level becomes the predicted
+  // tide at that moment plus whatever surge is dialled in.
+  const tide = (() => {
+    const el = document.getElementById("tide"), svg = document.getElementById("tideChart");
+    const whenEl = document.getElementById("tideWhen"), playBtn = document.getElementById("tidePlay");
+    const surgeRange = document.getElementById("surgeRange");
+    const W = 240, H = 66, TOP = 6, BOTTOM = 50, SPAN = 48 * 3.6e6;
+    const NS = "http://www.w3.org/2000/svg";
+    const fmtWhen = new Intl.DateTimeFormat("en-US", { weekday: "short", hour: "numeric", minute: "2-digit", timeZone: "America/New_York" });
+    const fmtDay = new Intl.DateTimeFormat("en-US", { weekday: "short", timeZone: "America/New_York" });
+    const fmtHour = new Intl.DateTimeFormat("en-US", { hour: "numeric", hour12: false, timeZone: "America/New_York" });
+    let table = null, start = 0, time = 0, active = false, playTimer = 0, cursor = null, lo = -1, hi = 1;
+
+    const x = t => (t - start) / SPAN * W;
+    const y = m => BOTTOM - (m - lo) / (hi - lo) * (BOTTOM - TOP);
+    const node = (name, attrs, parent = svg) => {
+      const n = document.createElementNS(NS, name);
+      for (const k in attrs) n.setAttribute(k, attrs[k]);
+      parent.appendChild(n);
+      return n;
+    };
+
+    function draw() {
+      svg.replaceChildren();
+      // Fixed vertical range (lowest to highest astronomical tide) so every day reads on the same scale.
+      lo = datumNavd(table, "LAT") ?? -1.2; hi = datumNavd(table, "HAT") ?? 1.2;
+      const pts = series(table, start, start + SPAN, 240).map(p => [x(p.time), y(p.level + table.msl_navd88_m)]);
+      const line = pts.map((p, i) => `${i ? "L" : "M"}${p[0].toFixed(1)} ${p[1].toFixed(1)}`).join("");
+      node("path", { class: "area", d: `${line}L${W} ${BOTTOM}L0 ${BOTTOM}Z` });
+      // Local midnights, labelled with the weekday.
+      for (let t = Math.ceil(start / 3.6e6) * 3.6e6; t < start + SPAN; t += 3.6e6) {
+        if (Number(fmtHour.format(t)) % 24 !== 0) continue;
+        node("line", { class: "grid", x1: x(t), x2: x(t), y1: TOP - 4, y2: BOTTOM });
+        node("text", { x: x(t) + 3, y: H - 6 }).textContent = fmtDay.format(t + 3.6e6);
+      }
+      const mhhw = datumNavd(table, "MHHW");
+      if (mhhw != null) {
+        node("line", { class: "ref", x1: 0, x2: W, y1: y(mhhw), y2: y(mhhw) });
+        node("text", { x: W - 2, y: y(mhhw) - 2, "text-anchor": "end" }).textContent = "MHHW";
+      }
+      node("path", { class: "curve", d: line });
+      for (const e of extremes(table, start, start + SPAN)) {
+        node("circle", { class: "ext", cx: x(e.time), cy: y(e.level + table.msl_navd88_m), r: 1.8 });
+      }
+      node("line", { class: "nowtick", x1: x(Date.now()), x2: x(Date.now()), y1: BOTTOM, y2: BOTTOM + 5 });
+      cursor = node("g", { class: "cursor" });
+      node("line", { y1: TOP - 4, y2: BOTTOM }, cursor);
+      node("circle", { r: 3 }, cursor);
+      place();
+    }
+    function place() {
+      if (!cursor) return;
+      const cx = x(time), cy = y(tideNavd(table, time));
+      cursor.firstChild.setAttribute("x1", cx); cursor.firstChild.setAttribute("x2", cx);
+      cursor.lastChild.setAttribute("cx", cx); cursor.lastChild.setAttribute("cy", cy);
+    }
+
+    function apply() {
+      const tideFt = mToFt(tideNavd(table, time)), surge = Number(surgeRange.value);
+      el.classList.toggle("idle", !active);
+      place();
+      whenEl.textContent = `${fmtWhen.format(time)} · ${tideFt.toFixed(1).replace("-", "−")} ft`;
+      document.getElementById("surgeFt").textContent = `+${Number(surge.toFixed(2))} ft`;
+      svg.setAttribute("aria-valuetext", whenEl.textContent);
+      if (active) setFloodLevelFt(tideFt + surge, { decimals: 1 });
+    }
+    function setTime(t) {
+      time = Math.min(start + SPAN, Math.max(start, t));
+      active = true;
+      apply();
+    }
+    function window48(now = Date.now()) {
+      start = Math.floor(now / 3.6e6) * 3.6e6 - 6 * 3.6e6;   // six hours of context behind "now"
+      draw();
+    }
+    function stop() {
+      clearInterval(playTimer); playTimer = 0;
+      playBtn.setAttribute("aria-pressed", "false"); playBtn.textContent = "Play";
+    }
+
+    const fromPointer = e => {
+      const r = svg.getBoundingClientRect();
+      return start + Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)) * SPAN;
+    };
+    svg.addEventListener("pointerdown", e => { stop(); svg.setPointerCapture(e.pointerId); setTime(fromPointer(e)); });
+    svg.addEventListener("pointermove", e => { if (svg.hasPointerCapture(e.pointerId)) setTime(fromPointer(e)); });
+    svg.addEventListener("keydown", e => {
+      const step = { ArrowLeft: -1, ArrowRight: 1, PageDown: -6, PageUp: 6 }[e.key];
+      if (!step) return;
+      e.preventDefault(); stop(); setTime(time + step * 10 * 60e3);
+    });
+    document.getElementById("tideNow").addEventListener("click", () => { stop(); window48(); setTime(Date.now()); });
+    playBtn.addEventListener("click", () => {
+      if (playTimer) { stop(); return; }
+      playBtn.setAttribute("aria-pressed", "true"); playBtn.textContent = "Pause";
+      if (time >= start + SPAN - 60e3) time = start;
+      // 48 hours in about 24 seconds; ~8 frames a second keeps the redraw cheap.
+      playTimer = setInterval(() => setTime(time >= start + SPAN ? start : time + 15 * 60e3), 125);
+    });
+    surgeRange.addEventListener("input", () => { active = true; apply(); });
+
+    return {
+      async show() {
+        if (!table) table = await fetch("data/long-beach-tide.json").then(r => r.json());
+        if (!covers(table, Date.now()) || !covers(table, Date.now() + SPAN)) return;   // table expired: stay hidden
+        el.hidden = false;
+        time = Date.now();
+        window48();
+        apply();
+        const marks = document.getElementById("floodMarks");
+        marks.replaceChildren();
+        const mhhw = datumNavd(table, "MHHW");
+        if (mhhw != null) {
+          const m = document.createElement("i");
+          m.textContent = "high tide";
+          m.title = `Mean higher high water: ${mToFt(mhhw).toFixed(1)} ft NAVD88`;
+          m.style.left = `${(mToFt(mhhw) + 3) / 17 * 100}%`;
+          marks.appendChild(m);
+        }
+      },
+      /** Manual level control took over: keep the chart, stop driving the level. */
+      release() { if (!active) return; active = false; stop(); el.classList.add("idle"); },
+      hide() { stop(); active = false; },
+      get table() { return table; },
+    };
+  })();
+
   floodBtn.addEventListener("click", async () => {
     const on = !floodBtn.classList.contains("on");
     floodBtn.classList.toggle("on", on);
     floodBtn.setAttribute("aria-pressed", String(on));
     floodEl.hidden = !on;
-    if (!on) { flood.disable(); return; }
+    if (!on) { flood.disable(); tide.hide(); return; }
     floodBtn.classList.add("loading");
     try {
       await flood.enable();
-      syncFloodLevel();
+      setFloodLevelFt(Number(floodRange.value), { fromSlider: true });
+      tide.show().catch(err => console.warn("[tide]", err));
       // The dataset covers one barrier island; go there unless already looking at it.
       if (!flood.contains(map.getCenter())) map.flyTo({ ...flood.view(), duration: 1600 });
     } catch (err) {
