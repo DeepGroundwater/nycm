@@ -2,9 +2,11 @@
 
 Needs the optional `flood` extra (rasterio, scikit-image, ...); skipped without it.
 """
-import numpy as np
 import pytest
 
+# Every third-party import goes through importorskip: CI installs only the
+# `dev` extra, and a bare `import numpy` would fail collection for the whole run.
+np = pytest.importorskip("numpy")
 pytest.importorskip("rasterio")
 pytest.importorskip("skimage")
 
