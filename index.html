@@ -94,20 +94,61 @@
   }
 
   .flood { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--chip-border); max-width: 240px; }
-  .flood-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+  .flood-head { display: flex; flex-direction: column; gap: 1px; }
   .flood-place { font-size: 12px; font-weight: 600; }
   .flood-level { font-size: 12px; font-variant-numeric: tabular-nums; color: var(--muted); }
   .flood-level b { font-size: 17px; font-weight: 650; color: var(--ink); letter-spacing: -0.01em; }
-  .flood-level span { margin-left: 4px; font-size: 10.5px; }
+  .flood-level span { margin-left: 2px; font-size: 10.5px; }
   .flood-range { width: 100%; margin: 8px 0 0; accent-color: #3f7fcf; touch-action: pan-y; }
   .flood-scale, .ramp-labels {
     display: flex; justify-content: space-between;
     font-size: 9.5px; font-weight: 600; letter-spacing: 0.04em; color: var(--muted); font-style: normal;
   }
   .ramp-labels i { font-style: normal; }
+  .flood-marks { position: relative; height: 9px; margin: 8px 8px -5px; }
+  .flood-marks i { position: absolute; bottom: 0; width: 3px; height: 8px; margin-left: -1.5px; border-radius: 1px; background: var(--c); }
+  .flood-marks i.event { width: 0; height: 0; margin-left: -4px; background: none; border: 4px solid transparent; border-top: 7px solid var(--ink); border-bottom: 0; }
+  .flood-stages { margin-top: 5px; display: flex; flex-wrap: wrap; gap: 2px 8px; font-size: 9.5px; font-weight: 600; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .flood-stages span::before { content: ""; display: inline-block; width: 7px; height: 7px; border-radius: 2px; margin-right: 3px; background: var(--c); vertical-align: -0.5px; }
+  .flood-stages span.event::before { width: 0; height: 0; border-radius: 0; background: none; border: 3.5px solid transparent; border-top: 6px solid var(--ink); border-bottom: 0; vertical-align: -2px; }
+  .flood-freq { margin-top: 2px; font-size: 10.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .flood-stat b { font-weight: 650; }
+  .tide { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--chip-border); max-width: 240px; }
+  .tide-head { display: flex; flex-direction: column; gap: 1px; }
+  .tide-title { font-size: 12px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tide-when { font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--muted); }
+  .tide-when b { color: var(--ink); font-weight: 650; }
+  .tide-datum { margin-left: auto; font-size: 9.5px; font-weight: 600; letter-spacing: 0.04em; color: var(--muted); }
+  .tide-note { margin-top: 7px; font-size: 10px; line-height: 1.35; color: var(--muted); }
+  .tide-chart { display: block; width: 100%; height: auto; margin-top: 5px; cursor: ew-resize; touch-action: none; border-radius: 4px; }
+  .tide-chart:focus-visible { outline: 2px solid #3f7fcf; outline-offset: 2px; }
+  .tide-chart .area { fill: #3f7fcf; fill-opacity: 0.16; }
+  .tide-chart .curve { fill: none; stroke: #3f7fcf; stroke-width: 1.4; }
+  .tide-chart .grid { stroke: var(--muted); stroke-opacity: 0.3; stroke-width: 0.6; }
+  .tide-chart .ref { stroke: var(--muted); stroke-opacity: 0.55; stroke-width: 0.6; stroke-dasharray: 2 2; }
+  .tide-chart text { font-size: 7.5px; font-weight: 600; fill: var(--muted); }
+  .tide-chart .ext { fill: var(--chip-bg); stroke: #3f7fcf; stroke-width: 1; }
+  .tide-chart .nowtick { stroke: var(--ink); stroke-width: 0.8; stroke-opacity: 0.5; }
+  .tide-chart .cursor line { stroke: var(--ink); stroke-width: 1; }
+  .tide-chart .cursor circle { fill: #3f7fcf; stroke: var(--chip-bg); stroke-width: 1.5; }
+  .tide.idle .tide-chart .cursor { opacity: 0.35; }
+  .tide-row { display: flex; align-items: center; gap: 5px; margin-top: 7px; }
+  .tide-btn { white-space: nowrap; }
+  .tide-btn {
+    font: inherit; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em;
+    padding: 3px 8px; border-radius: 999px; border: 1px solid var(--chip-border);
+    background: transparent; color: var(--muted); cursor: pointer;
+  }
+  .tide-btn[aria-pressed="true"] { background: var(--ink); color: var(--earth); border-color: var(--ink); }
+  .tide-surge { display: flex; justify-content: space-between; gap: 8px; width: 100%; font-size: 10.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .tide-surge b { color: var(--ink); font-weight: 650; }
+  .surge-range { margin-top: 4px; accent-color: #c8683b; }
   .flood-stat { margin-top: 8px; font-size: 11.5px; font-weight: 600; font-variant-numeric: tabular-nums; }
   .flood-legend { margin-top: 8px; display: grid; gap: 6px; }
   .ramp { display: block; height: 7px; border-radius: 4px; border: 1px solid var(--chip-border); }
+  .ramp-near { background: linear-gradient(to right, #e26e1c 0 33.3%, #eea034 33.3% 66.6%, #f4c868 66.6% 100%); opacity: 0.85; }
+  .tide-chart .stage { stroke-width: 0.7; stroke-dasharray: 3 2; }
+  .tide-chart .pred { fill: none; stroke: var(--muted); stroke-width: 0.9; stroke-dasharray: 2 2; }
   .flood-note { margin-top: 8px; font-size: 10px; line-height: 1.35; color: var(--muted); }
 
   .swatches { margin-top: 8px; display: flex; gap: 4px; }
@@ -275,22 +316,48 @@
   <div class="toggles" role="group" aria-label="Live transit overlays">
     <button class="toggle" id="toggleSubway" style="--dot:#0039A6" aria-pressed="false">Subway</button>
     <button class="toggle" id="toggleRail"   style="--dot:#00985F" aria-pressed="false">Rail</button>
+    <button class="toggle" id="toggleTides"  style="--dot:#1b8a9c" aria-pressed="false">Tides</button>
     <button class="toggle" id="toggleFlood"  style="--dot:#3f7fcf" aria-pressed="false">Flood</button>
   </div>
   <div class="live-status" id="liveStatus" hidden>—</div>
 
+  <div class="tide" id="tide" hidden>
+    <div class="tide-head">
+      <span class="tide-title" id="tideStation">Tide</span>
+      <span class="tide-when" id="tideWhen">—</span>
+    </div>
+    <svg class="tide-chart" id="tideChart" viewBox="0 0 240 66" role="slider" tabindex="0"
+         aria-label="Predicted tide over 48 hours. Drag, or use the arrow keys, to pick a time."></svg>
+    <div class="tide-row">
+      <button class="tide-btn" id="tideNow" type="button">Now</button>
+      <button class="tide-btn" id="tidePlay" type="button" aria-pressed="false">Play</button>
+      <button class="tide-btn" id="tideEvent" type="button" aria-pressed="false" hidden>Event</button>
+      <span class="tide-datum">ft MLLW</span>
+    </div>
+    <div id="surgeWrap" hidden>
+      <div class="tide-row"><label class="tide-surge" for="surgeRange"><span id="surgeLabel">Surge on top of the tide</span> <b id="surgeFt">+0 ft</b></label></div>
+      <input class="flood-range surge-range" id="surgeRange" type="range" min="0" max="12" step="0.25" value="0"
+             aria-label="Storm surge added on top of the predicted tide, in feet" />
+    </div>
+    <div class="tide-note" id="tideNote" hidden></div>
+  </div>
+
   <div class="flood" id="flood" hidden>
     <div class="flood-head">
       <span class="flood-place" id="floodPlace">Long Beach</span>
-      <span class="flood-level"><b id="floodFt">6.5</b> ft <span id="floodM">1.98 m</span></span>
+      <span class="flood-level"><b id="floodFt">5.75</b> ft <span id="floodM">MLLW</span></span>
     </div>
-    <input class="flood-range" id="floodRange" type="range" min="0" max="14" step="0.25" value="6.5"
-           aria-label="Still-water level in feet, NAVD88" />
-    <div class="flood-scale"><span>0</span><span>water level, ft NAVD88</span><span>14</span></div>
+    <div class="flood-marks" id="floodMarks" aria-hidden="true"></div>
+    <input class="flood-range" id="floodRange" type="range" min="0" max="16" step="0.25" value="5.75"
+           aria-label="Still-water level in feet above MLLW at the Hog Island Channel gauge" />
+    <div class="flood-scale"><span>0</span><span id="floodScale">ft MLLW at Hog Island (HOGN6)</span><span>16</span></div>
+    <div class="flood-stages" id="floodStages"></div>
+
     <div class="flood-stat" id="floodStat">—</div>
+    <div class="flood-freq" id="floodFreq"></div>
     <div class="flood-legend">
-      <div><span class="ramp" id="rampElev"></span><span class="ramp-labels"><i>3 ft</i><i>ground</i><i>15+</i></span></div>
       <div><span class="ramp" id="rampDepth"></span><span class="ramp-labels"><i>0 ft</i><i>water depth</i><i>8+</i></span></div>
+      <div><span class="ramp ramp-near"></span><span class="ramp-labels"><i id="nearLo">½ ft</i><i>nearly under: ft left</i><i id="nearHi">1½</i></span></div>
     </div>
     <div class="flood-note" id="floodNote">Still water only — no waves, flow or drainage.</div>
   </div>
@@ -1425,45 +1492,450 @@
   setInterval(updateCloud, 15 * 60_000);
 
   // ---- Flood view (3DEP lidar elevation × buildings) ------------------------
-  import { createFlood, ftToM, mToFt, ELEV_RAMP, DEPTH_RAMP } from "./js/flood.js";
+  import { createFlood, ftToM, mToFt, DEPTH_RAMP } from "./js/flood.js";
+  import { tideMsl, datumNavd, covers, stationPredictor } from "./js/tide.js";
   const floodEl = document.getElementById("flood");
   const floodBtn = document.getElementById("toggleFlood");
   const floodRange = document.getElementById("floodRange");
   const gradient = stops => `linear-gradient(to right, ${stops.map(([, c]) => c).join(", ")})`;
-  document.getElementById("rampElev").style.background = gradient(ELEV_RAMP);
   document.getElementById("rampDepth").style.background = gradient(DEPTH_RAMP);
 
+  // The benchmark gauge: NOAA HOGN6 / USGS 01311143, Hog Island Channel. Levels
+  // are shown in its datum (ft above MLLW), with its official flood stages and
+  // its own record of how often each level is reached. The terrain is NAVD88.
+  let gauge = null;
+  const STAGE_COLOR = { minor: "#f5a623", moderate: "#e2372b", major: "#a32fb5" };
+  const navdOffsetFt = () => gauge?.navd88_above_mllw_ft ?? 0;
+  const stageAt = ft => gauge ? ["major", "moderate", "minor"].find(k => ft >= gauge.flood_stages_ft_mllw[k]) ?? null : null;
+  function daysReaching(ft) {
+    const rows = gauge.record.days_reaching_ft;
+    let n = rows[0][1];
+    for (const [level, days] of rows) { if (level <= ft) n = days; else break; }
+    return ft > rows.at(-1)[0] ? 0 : n;
+  }
+  let lastStats = null;
+
   const flood = createFlood(map, maplibregl, {
-    onChange({ wet, total, meta }) {
-      const pct = total ? Math.round(100 * wet / total) : 0;
-      document.getElementById("floodStat").textContent =
-        `${wet.toLocaleString()} of ${total.toLocaleString()} buildings reached (${pct}%)`;
-      document.getElementById("floodPlace").textContent = meta.name.split(",")[0];
+    onChange(st) {
+      lastStats = st;
+      const ft = Number(floodRange.dataset.level ?? floodRange.value), stage = stageAt(ft);
+      document.getElementById("floodStat").innerHTML =
+        `${st.wet.toLocaleString()} of ${st.total.toLocaleString()} buildings reached` +
+        (stage ? ` · <b style="color:${STAGE_COLOR[stage]}">${stage} flood stage</b>` : gauge ? " · below flood stage" : "");
+      document.getElementById("floodPlace").textContent = st.meta.name.split(",")[0];
+      if (gauge) {
+        const n = daysReaching(ft), r = gauge.record;
+        const span = `${r.from.slice(0, 4)}–${r.to.slice(0, 4)}`, top = r.highest_days[0];
+        document.getElementById("floodFreq").textContent = n
+          ? `The gauge reached this on ${n.toLocaleString()} of ${r.days.toLocaleString()} days, ${span}.`
+          : ft <= top.ft + 0.05
+            ? `The highest the gauge recorded, ${span}: ${top.ft} ft on ${top.date}.`
+            : `Higher than anything the gauge recorded, ${span} (${top.ft} ft).`;
+      }
       document.getElementById("floodNote").textContent =
-        `Still water only — no waves, flow or drainage. Ground: ${meta.source.split(",")[0]}, 2024 lidar.`;
+        `Still water only — no waves, flow or drainage. Ground: ${st.meta.source.split(",")[0]}, 2024 lidar. ` +
+        (gauge ? `Stages and record: NOAA ${gauge.id} / USGS ${gauge.usgs}. ` : "") +
+        (tide.floodTable ? `Tide: NOAA prediction, calibrated to the gauge; weather not included.` : "");
     },
   });
-  function syncFloodLevel() {
-    const ft = Number(floodRange.value);
-    document.getElementById("floodFt").textContent = ft.toFixed(ft % 1 ? 2 : 1).replace(/\.?0+$/, "") || "0";
-    document.getElementById("floodM").textContent = `${ftToM(ft).toFixed(2)} m`;
-    flood.setLevel(ftToM(ft));
+  function showGauge() {
+    const marks = document.getElementById("floodMarks"), legend = document.getElementById("floodStages");
+    marks.replaceChildren(); legend.replaceChildren();
+    const pos = ft => `${ft / 16 * 100}%`;
+    for (const k of ["minor", "moderate", "major"]) {
+      const ft = gauge.flood_stages_ft_mllw[k]; if (ft == null) continue;
+      const m = document.createElement("i"); m.style.setProperty("--c", STAGE_COLOR[k]); m.style.left = pos(ft); marks.appendChild(m);
+      const l = document.createElement("span"); l.style.setProperty("--c", STAGE_COLOR[k]); l.textContent = `${k} ${ft}`; legend.appendChild(l);
+    }
+    if (gauge.event) {
+      const ft = gauge.event.peak.ft_mllw;
+      const m = document.createElement("i"); m.className = "event"; m.style.left = pos(ft); marks.appendChild(m);
+      const l = document.createElement("span"); l.className = "event"; l.textContent = `${gauge.event.label} ${ft.toFixed(1)}`; legend.appendChild(l);
+    }
+    document.getElementById("floodScale").textContent = `ft MLLW at ${gauge.name.split(" at ")[0]} (${gauge.id})`;
+  }
+  // The level comes from the slider (manual), the tide clock, or an event replay.
+  // `ft` is feet above MLLW at the gauge; the terrain wants metres NAVD88.
+  function setFloodLevelFt(ft, { fromSlider = false, decimals = null } = {}) {
+    if (!fromSlider) floodRange.value = String(Math.min(16, Math.max(0, ft)));
+    floodRange.dataset.level = String(ft);
+    const shown = decimals == null ? String(Number(ft.toFixed(2))) : ft.toFixed(decimals);
+    document.getElementById("floodFt").textContent = shown.replace("-", "−");
+    document.getElementById("floodM").textContent = `MLLW · ${(ft - navdOffsetFt()).toFixed(1).replace("-", "−")} ft NAVD88`;
+    flood.setLevel(ftToM(ft - navdOffsetFt()));
   }
   let floodRAF = 0;
   floodRange.addEventListener("input", () => {
+    tide.release();                       // dragging the level by hand leaves tide mode
     cancelAnimationFrame(floodRAF);
-    floodRAF = requestAnimationFrame(syncFloodLevel);
+    floodRAF = requestAnimationFrame(() => setFloodLevelFt(Number(floodRange.value), { fromSlider: true }));
   });
+
+  // ---- Tide clock (NOAA harmonic prediction) --------------------------------
+  // One clock for the whole county. It drives three things:
+  //   - the chart, for whichever station is selected (heights above MLLW, as
+  //     tide tables print them);
+  //   - the station markers across Nassau County (the Tides toggle);
+  //   - the Long Beach flood level = Long Beach tide in NAVD88 + surge (Flood).
+  const tide = (() => {
+    const el = document.getElementById("tide"), svg = document.getElementById("tideChart");
+    const whenEl = document.getElementById("tideWhen"), playBtn = document.getElementById("tidePlay");
+    const surgeRange = document.getElementById("surgeRange"), noteEl = document.getElementById("tideNote");
+    const W = 240, H = 66, TOP = 6, BOTTOM = 50, HOUR = 3.6e6, TWO_DAYS = 48 * HOUR;
+    let SPAN = TWO_DAYS;                // the chart's time window; an event replay widens it
+    const NS = "http://www.w3.org/2000/svg", SRC = "tide-stations", DEFAULT_STATION = "8516663";
+    const fmtWhen = new Intl.DateTimeFormat("en-US", { weekday: "short", hour: "numeric", minute: "2-digit", timeZone: "America/New_York" });
+    const fmtTime = new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/New_York" });
+    const fmtDay = new Intl.DateTimeFormat("en-US", { weekday: "short", timeZone: "America/New_York" });
+    const fmtDate = new Intl.DateTimeFormat("en-US", { month: "numeric", day: "numeric", timeZone: "America/New_York" });
+    const fmtWhenDate = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: "America/New_York" });
+    const fmtHour = new Intl.DateTimeFormat("en-US", { hour: "numeric", hour12: false, timeZone: "America/New_York" });
+    const ft = m => mToFt(m).toFixed(1).replace("-", "−");
+
+    let doc = null, floodTable = null, loading = null;
+    let stations = [];                 // [{...station, predict, lo, hi}]
+    let selected = null, start = 0, time = 0, lo = 0, hi = 1, cursor = null;
+    let floodOn = false, stationsOn = false, driving = false, playTimer = 0, popup = null, popupStation = null;
+    let replay = null, beforeReplay = null;      // an observed event being replayed, and what to go back to
+
+    function load() {
+      loading ??= Promise.all([
+        fetch("data/nassau-tides.json").then(r => r.json()),
+        fetch("data/long-beach-tide.json").then(r => r.json()),
+      ]).then(([d, t]) => {
+        doc = d; floodTable = t;
+        const now = Date.now();
+        stations = d.stations.map(st => {
+          const predict = stationPredictor(d, st);
+          // Each station's own range over a fortnight, to colour its marker.
+          const ext = predict.extremes(now - 7 * 24 * HOUR, now + 7 * 24 * HOUR).map(e => e.level);
+          return { ...st, predict, lo: Math.min(...ext), hi: Math.max(...ext) };
+        });
+        selected = stations.find(st => st.id === DEFAULT_STATION) ?? stations[0];
+      });
+      return loading;
+    }
+    const usable = () => doc && covers(floodTable, Date.now()) && covers(floodTable, Date.now() + TWO_DAYS + 14 * 24 * HOUR);
+
+    const x = t => (t - start) / SPAN * W;
+    const y = m => BOTTOM - (m - lo) / (hi - lo) * (BOTTOM - TOP);
+    const node = (name, attrs, parent = svg) => {
+      const n = document.createElementNS(NS, name);
+      for (const k in attrs) n.setAttribute(k, attrs[k]);
+      parent.appendChild(n);
+      return n;
+    };
+    const shortName = name => title(name).split(",")[0];
+    // The flood follows the selected station when that station has its own
+    // harmonics and sits inside the flooded area; otherwise the Long Beach gauge.
+    function floodSource() {
+      const ok = selected?.kind === "harmonic" && flood.contains({ lng: selected.lng, lat: selected.lat });
+      return ok ? { name: selected.name, table: selected.predict.table } : { name: floodTable.name, table: floodTable };
+    }
+    // With the flood view on, the chart speaks the gauge's datum, so the curve,
+    // the level readout and the flood stages are all the same number. The shift
+    // takes a height above the station's own (1983-2001) MLLW to feet-above-MLLW
+    // at the gauge today: station MLLW -> station MSL -> NAVD88 now -> gauge MLLW.
+    function chartShift() {
+      if (!floodOn || replay || !gauge || selected?.kind !== "harmonic") return 0;
+      const t = selected.predict.table;
+      if (t !== floodSource().table && selected.id !== floodTable.station) return 0;
+      return (t.datums.MLLW ?? 0) + floodTable.msl_navd88_m + ftToM(navdOffsetFt());
+    }
+    const title = name => name.replace(/\b([A-Z])([A-Z']+)\b/g, (_, a, b) => a + b.toLowerCase());
+
+    function draw() {
+      svg.replaceChildren();
+      const t = selected.predict.table, shift = chartShift();
+      const pts = [];
+      for (let i = 0; i < 240; i++) { const ms = start + SPAN * i / 239, v = selected.predict.level(ms); pts.push([ms, v == null ? null : v + shift]); }
+      // Harmonic stations: fixed range (lowest to highest astronomical tide), so
+      // every day reads on one scale. Subordinate stations have no datums.
+      const vals = pts.map(p => p[1]).filter(v => v != null);
+      const mllw = t?.datums.MLLW ?? 0;
+      lo = t?.datums.LAT != null ? t.datums.LAT - mllw + shift : Math.min(...vals) - 0.15;
+      hi = t?.datums.HAT != null ? t.datums.HAT - mllw + shift : Math.max(...vals) + 0.15;
+      if (replay) { lo = Math.min(0, ...vals) - 0.1; hi = Math.max(...vals, ftToM(gauge.flood_stages_ft_mllw.major ?? 0)) + 0.25; }
+      const path = list => list.filter(p => p[1] != null).map((p, i) => `${i ? "L" : "M"}${x(p[0]).toFixed(1)} ${y(p[1]).toFixed(1)}`).join("");
+      const line = path(pts);
+      node("path", { class: "area", d: `${line}L${W} ${BOTTOM}L0 ${BOTTOM}Z` });
+      for (let ms = Math.ceil(start / HOUR) * HOUR; ms < start + SPAN; ms += HOUR) {   // local midnights
+        if (Number(fmtHour.format(ms)) % 24 !== 0) continue;
+        node("line", { class: "grid", x1: x(ms), x2: x(ms), y1: TOP - 4, y2: BOTTOM });
+        node("text", { x: x(ms) + 3, y: H - 6 }).textContent = (SPAN > 60 * HOUR ? fmtDate : fmtDay).format(ms + HOUR);
+      }
+      if (replay) {
+        // Official flood stages, and what the tide alone was predicted to do:
+        // the gap between the dashed and solid curves is the storm surge.
+        for (const k of ["minor", "moderate", "major"]) {
+          const m = ftToM(gauge.flood_stages_ft_mllw[k]);
+          node("line", { class: "stage", stroke: STAGE_COLOR[k], x1: 0, x2: W, y1: y(m), y2: y(m) });
+        }
+        node("path", { class: "pred", d: path(pts.map(p => [p[0], tideMsl(floodTable, p[0]) + floodTable.msl_navd88_m + ftToM(navdOffsetFt())])) });
+      }
+      if (t?.datums.MHHW != null) {
+        const m = t.datums.MHHW - mllw + shift;
+        node("line", { class: "ref", x1: 0, x2: W, y1: y(m), y2: y(m) });
+        node("text", { x: W - 2, y: y(m) - 2, "text-anchor": "end" }).textContent = "MHHW";
+      }
+      node("path", { class: "curve", d: line });
+      for (const e of selected.predict.extremes(start, start + SPAN)) node("circle", { class: "ext", cx: x(e.time), cy: y(e.level + shift), r: 1.8 });
+      node("line", { class: "nowtick", x1: x(Date.now()), x2: x(Date.now()), y1: BOTTOM, y2: BOTTOM + 5 });
+      cursor = node("g", { class: "cursor" });
+      node("line", { y1: TOP - 4, y2: BOTTOM }, cursor);
+      node("circle", { r: 3 }, cursor);
+      document.getElementById("tideStation").textContent = shift
+        ? `${gauge.name.split(" at ")[0]} tide, from ${shortName(selected.name)}` : title(selected.name);
+      document.getElementById("tideStation").title = `NOAA station ${selected.id}`;
+    }
+
+    function stationFeatures() {
+      return {
+        type: "FeatureCollection",
+        features: stations.map(st => {
+          const level = st.predict.level(time), rising = st.predict.level(time + 5 * 60e3) > level;
+          return {
+            type: "Feature", geometry: { type: "Point", coordinates: [st.lng, st.lat] },
+            properties: {
+              id: st.id, selected: st === selected,
+              frac: Math.min(1, Math.max(0, (level - st.lo) / (st.hi - st.lo))),
+              label: `${ft(level)} ${rising ? "↑" : "↓"}`,
+            },
+          };
+        }),
+      };
+    }
+    function ensureLayer() {
+      if (!stationsOn || !doc) return;
+      if (!map.isStyleLoaded()) { map.once("idle", ensureLayer); return; }
+      if (map.getSource(SRC)) return;
+      map.addSource(SRC, { type: "geojson", data: stationFeatures() });
+      map.addLayer({
+        id: "tide-stations-dot", type: "circle", source: SRC,
+        paint: {
+          "circle-radius": ["case", ["get", "selected"], 8, 6],
+          // Pale at that station's low water, deep at its high water.
+          "circle-color": ["interpolate", ["linear"], ["get", "frac"], 0, "#d3e6f5", 0.5, "#5a9bd8", 1, "#173f86"],
+          "circle-stroke-color": ["case", ["get", "selected"], "#111827", "#ffffff"],
+          "circle-stroke-width": ["case", ["get", "selected"], 2.2, 1.4],
+        },
+      });
+      map.addLayer({
+        id: "tide-stations-label", type: "symbol", source: SRC,
+        layout: {
+          "text-field": ["get", "label"], "text-font": ["Noto Sans Medium"], "text-size": 11.5,
+          "text-offset": [0, -1.25], "text-anchor": "bottom", "text-allow-overlap": false, "text-padding": 1,
+          "symbol-sort-key": ["case", ["get", "selected"], 0, 1],
+        },
+        paint: { "text-color": "#12305f", "text-halo-color": "#ffffff", "text-halo-width": 1.6 },
+      });
+    }
+    function removeLayer() {
+      for (const id of ["tide-stations-label", "tide-stations-dot"]) if (map.getLayer(id)) map.removeLayer(id);
+      if (map.getSource(SRC)) map.removeSource(SRC);
+      popup?.remove();
+    }
+
+    function apply() {
+      if (!selected) return;
+      const raw = selected.predict.level(time);
+      if (raw == null) return;                       // no reading here: leave everything as it was
+      const level = raw + chartShift();
+      const cx = x(time), cy = y(level);
+      cursor.firstChild.setAttribute("x1", cx); cursor.firstChild.setAttribute("x2", cx);
+      cursor.lastChild.setAttribute("cx", cx); cursor.lastChild.setAttribute("cy", cy);
+      whenEl.innerHTML = `${(replay ? fmtWhenDate : fmtWhen).format(time)} · <b>${ft(level)} ft</b>${replay ? " observed" : ""}`;
+      svg.setAttribute("aria-valuetext", whenEl.textContent);
+      map.getSource(SRC)?.setData(stationFeatures());
+      if (popup?.isOpen() && popupStation) popup.setHTML(describe(popupStation));   // keep the open card on the clock
+      const surge = Number(surgeRange.value);
+      document.getElementById("surgeFt").textContent = `+${Number(surge.toFixed(2))} ft`;
+      el.classList.toggle("idle", floodOn && !driving);
+      const src = floodSource();
+      document.getElementById("surgeLabel").textContent = `Surge on top of the ${shortName(src.name)} tide`;
+      if (floodOn && driving) {
+        // Replay: the gauge's own reading. Otherwise: predicted tide (above the
+        // table's mean sea level) + the calibration that puts it in NAVD88 today
+        // + the gauge's NAVD88-to-MLLW offset + any surge dialled in.
+        const ftMllw = replay ? mToFt(level) : mToFt(tideMsl(src.table, time) + floodTable.msl_navd88_m) + navdOffsetFt() + surge;
+        setFloodLevelFt(ftMllw, { decimals: 1 });
+      }
+    }
+    function setTime(ms) {
+      time = Math.min(start + SPAN, Math.max(start, ms));
+      driving = true;
+      apply();
+    }
+    function window48(now = Date.now()) {
+      endReplay();
+      SPAN = TWO_DAYS;
+      start = Math.floor(now / HOUR) * HOUR - 6 * HOUR;       // six hours of context behind "now"
+      draw();
+    }
+    // Replay an observed event from the gauge: the chart and the flood both run
+    // on what the water actually did.
+    function startReplay(ev) {
+      const t0 = Date.parse(ev.start), step = ev.step_minutes * 6e4, v = ev.ft_mllw;
+      const level = ms => {
+        const f = (ms - t0) / step, i = Math.floor(f);
+        if (i < 0 || i >= v.length - 1 || v[i] == null || v[i + 1] == null) return v[Math.max(0, Math.min(v.length - 1, Math.round(f)))] == null ? null : ftToM(v[Math.max(0, Math.min(v.length - 1, Math.round(f)))]);
+        return ftToM(v[i] + (v[i + 1] - v[i]) * (f - i));
+      };
+      beforeReplay ??= selected;
+      replay = ev;
+      selected = { id: gauge.id, name: `${gauge.name.split(" at ")[0]}, ${ev.label}`, kind: "observed", lng: gauge.lng, lat: gauge.lat,
+                   predict: { table: null, harmonic: false, level, extremes: () => [] } };
+      start = t0; SPAN = (v.length - 1) * step;
+      document.getElementById("tideEvent").setAttribute("aria-pressed", "true");
+      document.getElementById("surgeWrap").hidden = true;
+      draw();
+      setTime(Date.parse(ev.peak.time));
+    }
+    function endReplay() {
+      if (!replay) return;
+      replay = null;
+      selected = beforeReplay ?? selected; beforeReplay = null;
+      document.getElementById("tideEvent").setAttribute("aria-pressed", "false");
+      document.getElementById("surgeWrap").hidden = !floodOn;
+    }
+    function stop() {
+      clearInterval(playTimer); playTimer = 0;
+      playBtn.setAttribute("aria-pressed", "false"); playBtn.textContent = "Play";
+    }
+    function select(st) {
+      if (replay) { beforeReplay = st; window48(); time = Date.now(); apply(); return; }
+      selected = st;
+      draw(); apply();
+    }
+
+    function describe(st) {
+      const next = st.predict.extremes(time, time + 26 * HOUR);
+      const row = type => {
+        const e = next.find(n => n.type === type);
+        return e ? `<div>${type === "H" ? "High" : "Low"} ${fmtWhen.format(e.time)} · <b>${ft(e.level)} ft</b></div>` : "";
+      };
+      const how = st.kind === "harmonic"
+        ? "Predicted from this station's own harmonic constituents."
+        : `No harmonics here: NOAA derives it from ${title(doc.tables[st.ref].name)} ` +
+          `(high water ${st.high.minutes >= 0 ? "+" : "−"}${Math.abs(st.high.minutes)} min, × ${st.high.height}).`;
+      return `<div style="font:12px/1.45 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#222">
+        <div style="font-weight:600">${title(st.name)}</div>
+        <div style="color:#666;margin-bottom:3px">${fmtWhen.format(time)} · <b style="color:#12305f">${ft(st.predict.level(time))} ft</b> above MLLW</div>
+        ${row("H")}${row("L")}
+        <div style="color:#888;margin-top:3px;font-size:11px">${how} NOAA ${st.id}.</div></div>`;
+    }
+    map.on("click", "tide-stations-dot", e => {
+      const st = stations.find(x => x.id === e.features[0]?.properties.id); if (!st) return;
+      select(st);
+      popup ??= new maplibregl.Popup({ closeButton: false, maxWidth: "250px", offset: 12 });
+      popupStation = st;
+      popup.setLngLat([st.lng, st.lat]).setHTML(describe(st)).addTo(map);
+    });
+    map.on("mouseenter", "tide-stations-dot", () => { map.getCanvas().style.cursor = "pointer"; });
+    map.on("mouseleave", "tide-stations-dot", () => { map.getCanvas().style.cursor = ""; });
+    map.on("styledata", ensureLayer);
+
+    const fromPointer = e => {
+      const r = svg.getBoundingClientRect();
+      return start + Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)) * SPAN;
+    };
+    svg.addEventListener("pointerdown", e => { stop(); svg.setPointerCapture(e.pointerId); setTime(fromPointer(e)); });
+    svg.addEventListener("pointermove", e => { if (svg.hasPointerCapture(e.pointerId)) setTime(fromPointer(e)); });
+    svg.addEventListener("keydown", e => {
+      const step = { ArrowLeft: -1, ArrowRight: 1, PageDown: -6, PageUp: 6 }[e.key];
+      if (!step) return;
+      e.preventDefault(); stop(); setTime(time + step * 10 * 60e3);
+    });
+    document.getElementById("tideNow").addEventListener("click", () => { stop(); window48(); setTime(Date.now()); });
+    playBtn.addEventListener("click", () => {
+      if (playTimer) { stop(); return; }
+      playBtn.setAttribute("aria-pressed", "true"); playBtn.textContent = "Pause";
+      if (time >= start + SPAN - 60e3) time = start;
+      // 48 hours in about 24 seconds; ~8 frames a second keeps the redraw cheap.
+      playTimer = setInterval(() => setTime(time >= start + SPAN ? start : time + SPAN / 192), 125);
+    });
+    surgeRange.addEventListener("input", () => { driving = true; apply(); });
+    document.getElementById("tideEvent").addEventListener("click", () => {
+      stop();
+      if (replay) { window48(); setTime(Date.now()); } else if (gauge?.event) startReplay(gauge.event);
+    });
+
+    async function sync() {
+      const show = floodOn || stationsOn;
+      if (!show) { stop(); el.hidden = true; return; }
+      await load();
+      if (!usable() || !(floodOn || stationsOn)) return;       // table expired: stay hidden
+      const first = el.hidden;
+      el.hidden = false;
+      document.getElementById("surgeWrap").hidden = !floodOn || Boolean(replay);
+      const evBtn = document.getElementById("tideEvent");
+      evBtn.hidden = !(floodOn && gauge?.event);
+      if (gauge?.event) { evBtn.textContent = gauge.event.label; evBtn.title = `Replay what the gauge recorded, ${gauge.event.label}`; }
+      if (!floodOn && replay) { window48(); time = Date.now(); }
+      noteEl.hidden = !stationsOn;
+      noteEl.textContent = `${stations.length} NOAA stations around ${doc.name.split(",")[0]}. Astronomical tide only — weather is not included. Tap a station for its curve.`;
+      if (first) { time = Date.now(); window48(); }
+      apply();
+    }
+
+    return {
+      /** Flood view on/off: adds the surge control and lets the clock drive the level. */
+      async setFlood(on) {
+        floodOn = on; driving = false;
+        await sync();
+        if (selected && !el.hidden) { draw(); apply(); }      // the chart's datum follows the flood view
+        if (!on || !usable()) return;
+        flood.setTideRange(datumNavd(floodTable, "LAT") ?? -1.14, datumNavd(floodTable, "HAT") ?? 1.02);
+      },
+      /** County-wide station markers on/off. Resolves to the area's bounds, or null. */
+      async setStations(on) {
+        stationsOn = on;
+        if (!on) removeLayer();
+        await sync();
+        if (on && usable()) { ensureLayer(); return doc.bbox; }
+        return null;
+      },
+      /** Manual level control took over: keep the clock, stop driving the level. */
+      release() { if (!driving) return; driving = false; stop(); el.classList.toggle("idle", floodOn); },
+      get floodTable() { return floodTable; },
+    };
+  })();
+
+  const tidesBtn = document.getElementById("toggleTides");
+  tidesBtn.addEventListener("click", async () => {
+    const on = !tidesBtn.classList.contains("on");
+    tidesBtn.classList.toggle("on", on);
+    tidesBtn.setAttribute("aria-pressed", String(on));
+    tidesBtn.classList.add("loading");
+    try {
+      const bbox = await tide.setStations(on);
+      if (!bbox) return;
+      // Bring the county into view unless the user is already looking inside it.
+      const c = map.getCenter(), [w, s, e, n] = bbox;
+      const inside = c.lng > w && c.lng < e && c.lat > s && c.lat < n;
+      if (!inside || map.getZoom() > 13.5) {
+        map.fitBounds([[w, s], [e, n]], { padding: { top: 40, bottom: 40, left: innerWidth > 700 ? 300 : 20, right: 40 }, pitch: 0, bearing: 0, duration: 1400 });
+      }
+    } catch (err) {
+      console.error("[tide]", err);
+    } finally {
+      tidesBtn.classList.remove("loading");
+    }
+  });
+
   floodBtn.addEventListener("click", async () => {
     const on = !floodBtn.classList.contains("on");
     floodBtn.classList.toggle("on", on);
     floodBtn.setAttribute("aria-pressed", String(on));
     floodEl.hidden = !on;
-    if (!on) { flood.disable(); return; }
+    if (!on) { flood.disable(); tide.setFlood(false); return; }
     floodBtn.classList.add("loading");
     try {
+      gauge ??= await fetch("data/hog-island-gauge.json").then(r => r.json());
+      showGauge();
       await flood.enable();
-      syncFloodLevel();
+      setFloodLevelFt(Number(floodRange.value), { fromSlider: true });
+      tide.setFlood(true).catch(err => console.warn("[tide]", err));
       // The dataset covers one barrier island; go there unless already looking at it.
       if (!flood.contains(map.getCenter())) map.flyTo({ ...flood.view(), duration: 1600 });
     } catch (err) {

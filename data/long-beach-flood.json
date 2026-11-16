@@ -1,35 +1,46 @@
 {
-  "name": "Long Beach, NY",
+  "name": "Long Beach & Oceanside, NY",
   "bbox": [
     -73.745,
     40.573,
     -73.572,
-    40.613
+    40.66
   ],
   "dem": {
     "url": "long-beach-dem.png",
-    "width": 3656,
-    "height": 1113,
+    "width": 3655,
+    "height": 2421,
     "cell_m": 4.0,
-    "land_fraction": 0.43297876105150784,
-    "sheltered_fraction_of_land": 0.050789342541856665,
+    "land_fraction": 0.6876750458115294,
+    "sheltered_fraction_of_land": 0.07870840555931338,
     "offset_m": 20.0,
     "scale": 100,
     "sill_step_m": 0.02,
-    "sea_below_m": 0.5
+    "sea_below_m": -0.3
   },
   "buildings": {
     "url": "long-beach-buildings.geojson",
-    "count": 5449,
-    "with_osm_height": 308,
-    "sheltered": 243,
+    "count": 16745,
+    "count_total": 22758,
+    "max_ground_m": 4.6,
+    "with_osm_height": 706,
+    "sheltered": 585,
     "lo_percentiles_m": {
-      "5": 1.48,
-      "25": 1.97,
-      "50": 2.38,
-      "75": 2.84,
-      "95": 6.19
+      "5": 1.43,
+      "25": 2.0,
+      "50": 2.41,
+      "75": 2.91,
+      "95": 4.17
     }
+  },
+  "view": {
+    "center": [
+      -73.629,
+      40.629
+    ],
+    "zoom": 15.5,
+    "pitch": 50.0,
+    "bearing": -15.0
   },
   "vertical_datum": "NAVD88",
   "units": "m",
