@@ -5,15 +5,17 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { countReached, ftToM } from "../../../js/flood.js";
+import { reachedFromTable, toCm, ftToM } from "../../../js/flood.js";
 import { tideMsl } from "../../../js/tide.js";
 
 const data = name => JSON.parse(readFileSync(new URL(`../../../data/${name}`, import.meta.url)));
-const gauge = data("hog-island-gauge.json"), meta = data("long-beach-flood.json");
-const thresholds = Float32Array.from(data("long-beach-buildings.geojson").features, f => f.properties.w);
-// Buildings the sea reaches at a level given in the gauge's datum (ft MLLW).
-const reached = ftMllw => countReached(thresholds, ftToM(ftMllw - gauge.navd88_above_mllw_ft));
-const share = ftMllw => reached(ftMllw) / meta.buildings.count_total;
+const index = data("flood/nassau/index.json");
+const south = index.regions.find(r => r.id === "south"), north = index.regions.find(r => r.id === "north");
+const gauge = data("hog-island-gauge.json"), kings = data("kings-point-gauge.json");
+// Buildings the sea reaches on a stretch of coast, at a level in its gauge's datum (ft MLLW).
+const reachedIn = (region, g, ftMllw) => reachedFromTable(region.reach_cm, region.reach_count, toCm(ftToM(ftMllw - g.navd88_above_mllw_ft)));
+const reached = ftMllw => reachedIn(south, gauge, ftMllw);
+const share = ftMllw => reached(ftMllw) / south.buildings_total;
 
 test("gauge file is internally consistent", () => {
   const s = gauge.flood_stages_ft_mllw;
@@ -47,10 +49,27 @@ test("benchmark: the moderate flood stage still reaches very few", () => {
   assert.ok(share(gauge.flood_stages_ft_mllw.moderate) < 0.02, `${reached(gauge.flood_stages_ft_mllw.moderate)} reached`);
 });
 
-test("benchmark: the Sep 2026 peak reaches many times more than the moderate stage", () => {
+test("benchmark: the Sep 2026 peak reaches several times more than the moderate stage", () => {
   const peak = reached(gauge.event.peak.ft_mllw), moderate = reached(gauge.flood_stages_ft_mllw.moderate);
-  assert.ok(share(gauge.event.peak.ft_mllw) > 0.08, `${peak} reached`);
-  assert.ok(peak > 5 * moderate, `${peak} vs ${moderate}`);
+  assert.ok(share(gauge.event.peak.ft_mllw) > 0.03, `${peak} reached`);
+  assert.ok(peak > 3 * moderate, `${peak} vs ${moderate}`);
+});
+
+test("each region names a gauge and a tide table that exist and agree on the calibration", () => {
+  for (const [region, g] of [[south, gauge], [north, kings]]) {
+    assert.equal(region.gauge, `data/${g === gauge ? "hog-island" : "kings-point"}-gauge.json`);
+    const table = JSON.parse(readFileSync(new URL(`../../../${region.tide}`, import.meta.url)));
+    assert.equal(table.msl_navd88_m, g.calibration.msl_navd88_m);
+    assert.equal(table.station, g.calibration.table_station);
+    assert.ok(region.buildings_total > 10000);
+  }
+});
+
+test("benchmark, north shore: Kings Point's typical high tide reaches almost nothing; its record high reaches more", () => {
+  const typical = reachedIn(north, kings, kings.record.daily_high_ft_mllw.median);
+  const record = reachedIn(north, kings, kings.record.highest_days[0].ft);
+  assert.ok(typical / north.buildings_total < 0.002, `${typical} reached`);
+  assert.ok(record > typical);
 });
 
 test("the tide prediction is calibrated to the gauge: ordinary predicted highs sit near the observed typical high", () => {

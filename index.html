@@ -349,7 +349,7 @@
     </div>
     <div class="flood-marks" id="floodMarks" aria-hidden="true"></div>
     <input class="flood-range" id="floodRange" type="range" min="0" max="16" step="0.25" value="5.75"
-           aria-label="Still-water level in feet above MLLW at the Hog Island Channel gauge" />
+           aria-label="Still-water level in feet above MLLW at the nearest benchmark gauge" />
     <div class="flood-scale"><span>0</span><span id="floodScale">ft MLLW at Hog Island (HOGN6)</span><span>16</span></div>
     <div class="flood-stages" id="floodStages"></div>
 
@@ -1500,13 +1500,32 @@
   const gradient = stops => `linear-gradient(to right, ${stops.map(([, c]) => c).join(", ")})`;
   document.getElementById("rampDepth").style.background = gradient(DEPTH_RAMP);
 
-  // The benchmark gauge: NOAA HOGN6 / USGS 01311143, Hog Island Channel. Levels
-  // are shown in its datum (ft above MLLW), with its official flood stages and
-  // its own record of how often each level is reached. The terrain is NAVD88.
-  let gauge = null;
-  const STAGE_COLOR = { minor: "#f5a623", moderate: "#e2372b", major: "#a32fb5" };
+  // Each stretch of coast answers to its own benchmark gauge: Hog Island
+  // Channel (NOAA HOGN6) for the south-shore bays, Kings Point (KPTN6) for the
+  // Sound. Levels are shown in that gauge's datum (ft above MLLW), with its
+  // official flood stages and its own record of how often each level is
+  // reached. The terrain itself is NAVD88.
+  let gauge = null, regionId = null;
+  const regionData = new Map();          // region id -> { gauge, table }
+  const STAGES = ["major", "moderate", "minor", "action"];
+  const STAGE_COLOR = { action: "#e8c91d", minor: "#f5a623", moderate: "#e2372b", major: "#a32fb5" };
   const navdOffsetFt = () => gauge?.navd88_above_mllw_ft ?? 0;
-  const stageAt = ft => gauge ? ["major", "moderate", "minor"].find(k => ft >= gauge.flood_stages_ft_mllw[k]) ?? null : null;
+  const stageAt = ft => gauge ? STAGES.find(k => ft >= (gauge.flood_stages_ft_mllw[k] ?? Infinity)) ?? null : null;
+  async function useRegion(region) {
+    if (!region || region.id === regionId) return;
+    regionId = region.id;                // claim it first: the loads below are async
+    let r = regionData.get(region.id);
+    if (!r) {
+      const [g, t] = await Promise.all([fetch(region.gauge).then(x => x.json()), fetch(region.tide).then(x => x.json())]);
+      regionData.set(region.id, r = { gauge: g, table: t });
+    }
+    if (regionId !== region.id) return;  // moved on while loading
+    gauge = r.gauge;
+    tide.setFloodTable(r.table);
+    showGauge();
+    // Start from this gauge's typical high tide, where almost nothing is reached.
+    setFloodLevelFt(Math.round(gauge.record.daily_high_ft_mllw.median * 4) / 4);
+  }
   function daysReaching(ft) {
     const rows = gauge.record.days_reaching_ft;
     let n = rows[0][1];
@@ -1518,11 +1537,12 @@
   const flood = createFlood(map, maplibregl, {
     onChange(st) {
       lastStats = st;
+      if (st.region && st.region.id !== regionId) { useRegion(st.region); return; }   // crossed to another gauge
       const ft = Number(floodRange.dataset.level ?? floodRange.value), stage = stageAt(ft);
       document.getElementById("floodStat").innerHTML =
         `${st.wet.toLocaleString()} of ${st.total.toLocaleString()} buildings reached` +
         (stage ? ` · <b style="color:${STAGE_COLOR[stage]}">${stage} flood stage</b>` : gauge ? " · below flood stage" : "");
-      document.getElementById("floodPlace").textContent = st.meta.name.split(",")[0];
+      document.getElementById("floodPlace").textContent = st.region ? `${st.region.name}, ${st.meta.name.split(",")[0]}` : st.meta.name.split(",")[0];
       if (gauge) {
         const n = daysReaching(ft), r = gauge.record;
         const span = `${r.from.slice(0, 4)}–${r.to.slice(0, 4)}`, top = r.highest_days[0];
@@ -1534,7 +1554,7 @@
       }
       document.getElementById("floodNote").textContent =
         `Still water only — no waves, flow or drainage. Ground: ${st.meta.source.split(",")[0]}, 2024 lidar. ` +
-        (gauge ? `Stages and record: NOAA ${gauge.id} / USGS ${gauge.usgs}. ` : "") +
+        (gauge ? `Stages and record: NOAA ${gauge.id}${gauge.usgs ? ` / USGS ${gauge.usgs}` : gauge.coops ? ` / station ${gauge.coops}` : ""}. ` : "") +
         (tide.floodTable ? `Tide: NOAA prediction, calibrated to the gauge; weather not included.` : "");
     },
   });
@@ -1542,7 +1562,7 @@
     const marks = document.getElementById("floodMarks"), legend = document.getElementById("floodStages");
     marks.replaceChildren(); legend.replaceChildren();
     const pos = ft => `${ft / 16 * 100}%`;
-    for (const k of ["minor", "moderate", "major"]) {
+    for (const k of [...STAGES].reverse()) {
       const ft = gauge.flood_stages_ft_mllw[k]; if (ft == null) continue;
       const m = document.createElement("i"); m.style.setProperty("--c", STAGE_COLOR[k]); m.style.left = pos(ft); marks.appendChild(m);
       const l = document.createElement("span"); l.style.setProperty("--c", STAGE_COLOR[k]); l.textContent = `${k} ${ft}`; legend.appendChild(l);
@@ -1601,9 +1621,8 @@
     function load() {
       loading ??= Promise.all([
         fetch("data/nassau-tides.json").then(r => r.json()),
-        fetch("data/long-beach-tide.json").then(r => r.json()),
-      ]).then(([d, t]) => {
-        doc = d; floodTable = t;
+      ]).then(([d]) => {
+        doc = d;
         const now = Date.now();
         stations = d.stations.map(st => {
           const predict = stationPredictor(d, st);
@@ -1615,7 +1634,10 @@
       });
       return loading;
     }
-    const usable = () => doc && covers(floodTable, Date.now()) && covers(floodTable, Date.now() + TWO_DAYS + 14 * 24 * HOUR);
+    const usable = () => {
+      const t = floodTable ?? doc?.tables[DEFAULT_STATION];
+      return Boolean(t) && covers(t, Date.now()) && covers(t, Date.now() + TWO_DAYS + 14 * 24 * HOUR);
+    };
 
     const x = t => (t - start) / SPAN * W;
     const y = m => BOTTOM - (m - lo) / (hi - lo) * (BOTTOM - TOP);
@@ -1627,9 +1649,10 @@
     };
     const shortName = name => title(name).split(",")[0];
     // The flood follows the selected station when that station has its own
-    // harmonics and sits inside the flooded area; otherwise the Long Beach gauge.
+    // harmonics and sits on the same stretch of coast; otherwise that coast's own table.
     function floodSource() {
-      const ok = selected?.kind === "harmonic" && flood.contains({ lng: selected.lng, lat: selected.lat });
+      const here = flood.region();
+      const ok = selected?.kind === "harmonic" && here && flood.regionFor({ lng: selected.lng, lat: selected.lat })?.id === here.id;
       return ok ? { name: selected.name, table: selected.predict.table } : { name: floodTable.name, table: floodTable };
     }
     // With the flood view on, the chart speaks the gauge's datum, so the curve,
@@ -1637,7 +1660,7 @@
     // takes a height above the station's own (1983-2001) MLLW to feet-above-MLLW
     // at the gauge today: station MLLW -> station MSL -> NAVD88 now -> gauge MLLW.
     function chartShift() {
-      if (!floodOn || replay || !gauge || selected?.kind !== "harmonic") return 0;
+      if (!floodOn || replay || !gauge || !floodTable || selected?.kind !== "harmonic") return 0;
       const t = selected.predict.table;
       if (t !== floodSource().table && selected.id !== floodTable.station) return 0;
       return (t.datums.MLLW ?? 0) + floodTable.msl_navd88_m + ftToM(navdOffsetFt());
@@ -1667,7 +1690,8 @@
       if (replay) {
         // Official flood stages, and what the tide alone was predicted to do:
         // the gap between the dashed and solid curves is the storm surge.
-        for (const k of ["minor", "moderate", "major"]) {
+        for (const k of STAGES) {
+          if (gauge.flood_stages_ft_mllw[k] == null) continue;
           const m = ftToM(gauge.flood_stages_ft_mllw[k]);
           node("line", { class: "stage", stroke: STAGE_COLOR[k], x1: 0, x2: W, y1: y(m), y2: y(m) });
         }
@@ -1751,9 +1775,9 @@
       const surge = Number(surgeRange.value);
       document.getElementById("surgeFt").textContent = `+${Number(surge.toFixed(2))} ft`;
       el.classList.toggle("idle", floodOn && !driving);
-      const src = floodSource();
-      document.getElementById("surgeLabel").textContent = `Surge on top of the ${shortName(src.name)} tide`;
-      if (floodOn && driving) {
+      const src = floodTable ? floodSource() : null;
+      if (src) document.getElementById("surgeLabel").textContent = `Surge on top of the ${shortName(src.name)} tide`;
+      if (floodOn && driving && src) {
         // Replay: the gauge's own reading. Otherwise: predicted tide (above the
         // table's mean sea level) + the calibration that puts it in NAVD88 today
         // + the gauge's NAVD88-to-MLLW offset + any surge dialled in.
@@ -1884,8 +1908,16 @@
         floodOn = on; driving = false;
         await sync();
         if (selected && !el.hidden) { draw(); apply(); }      // the chart's datum follows the flood view
-        if (!on || !usable()) return;
-        flood.setTideRange(datumNavd(floodTable, "LAT") ?? -1.14, datumNavd(floodTable, "HAT") ?? 1.02);
+      },
+      /** The tide table for the stretch of coast in view (calibrated to its gauge). */
+      async setFloodTable(table) {
+        await load();
+        floodTable = table;
+        flood.setTideRange(datumNavd(table, "LAT") ?? -1.14, datumNavd(table, "HAT") ?? 1.02);
+        if (replay) { replay = null; beforeReplay = null; SPAN = TWO_DAYS; start = Math.floor(Date.now() / HOUR) * HOUR - 6 * HOUR; }
+        selected = stations.find(st => st.id === table.station) ?? selected;
+        driving = false;
+        if (!el.hidden) { draw(); time = Math.min(start + SPAN, Math.max(start, time || Date.now())); apply(); sync(); }
       },
       /** County-wide station markers on/off. Resolves to the area's bounds, or null. */
       async setStations(on) {
@@ -1928,16 +1960,17 @@
     floodBtn.classList.toggle("on", on);
     floodBtn.setAttribute("aria-pressed", String(on));
     floodEl.hidden = !on;
-    if (!on) { flood.disable(); tide.setFlood(false); return; }
+    if (!on) { flood.disable(); tide.setFlood(false); regionId = null; return; }
     floodBtn.classList.add("loading");
     try {
-      gauge ??= await fetch("data/hog-island-gauge.json").then(r => r.json());
-      showGauge();
       await flood.enable();
-      setFloodLevelFt(Number(floodRange.value), { fromSlider: true });
-      tide.setFlood(true).catch(err => console.warn("[tide]", err));
-      // The dataset covers one barrier island; go there unless already looking at it.
-      if (!flood.contains(map.getCenter())) map.flyTo({ ...flood.view(), duration: 1600 });
+      // Go to the covered area unless already looking at it, and take on the
+      // gauge for that stretch of coast.
+      const c = map.getCenter(), view = flood.view();
+      const target = flood.regionFor(c) ? c : { lng: view.center[0], lat: view.center[1] };
+      await tide.setFlood(true);
+      await useRegion(flood.regionFor(target));
+      if (target !== c) map.flyTo({ ...view, duration: 1600 });
     } catch (err) {
       console.error("[flood]", err);
       document.getElementById("floodStat").textContent = "Couldn't load the elevation data.";

@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { decodeGrid, isWet, classify, paintWindow, gridWindow, seaTint, countReached, toCm, ftToM, mToFt,
+import { decodeGrid, isWet, classify, paintWindow, singleTile, tilesFor, reachedFromTable, regionAt, gridWindow, seaTint,
+         countReached, toCm, ftToM, mToFt,
          SEA, DRY, NEAR_1, NEAR_2, NEAR_3, WET, WATER } from "../../../js/flood.js";
 
 const DEM = { offset_m: 20, scale: 100, sill_step_m: 0.02 };
@@ -13,8 +14,9 @@ function encode(elev, fill, sea = false) {
   return [q >> 8, q & 255, sill, 255];
 }
 const grid = cells => decodeGrid(Uint8ClampedArray.from(cells.flat()), DEM);
-// A whole-grid window over a single row of cells.
+// A whole-grid window over a single row of cells, held as one tile.
 const rowWindow = n => ({ c0: 0, r0: 0, ow: n, oh: 1, stride: 1, width: n, height: 1 });
+const one = (g, n) => singleTile(g, n);
 
 test("decode recovers ground exactly, in centimetres", () => {
   for (const e of [-19.99, -0.62, 0, 0.5, 1.23, 2.38, 9.99, 41.83, 300]) {
@@ -94,7 +96,7 @@ test("paintWindow: wet count is monotone, painted depth is positive, dry cells a
   const g = grid(cells), out = new Uint8ClampedArray(cells.length * 4);
   let prev = -1;
   for (let level = 0; level <= 9; level += 0.25) {
-    const wet = paintWindow(g, toCm(level), rowWindow(cells.length), out);
+    const wet = paintWindow(one(g, cells.length), toCm(level), rowWindow(cells.length), out);
     assert.ok(wet >= prev, `count fell at ${level}`);
     prev = wet;
     for (let i = 0; i < cells.length; i++) {
@@ -108,9 +110,9 @@ test("paintWindow: wet count is monotone, painted depth is positive, dry cells a
 
 test("paintWindow tints open water only when asked, and more at a higher tide", () => {
   const g = grid([encode(0, 0, true)]), out = new Uint8ClampedArray(4);
-  paintWindow(g, 0, rowWindow(1), out);
+  paintWindow(one(g, 1), 0, rowWindow(1), out);
   assert.equal(out[3], 0);
-  paintWindow(g, 0, rowWindow(1), out, 40);
+  paintWindow(one(g, 1), 0, rowWindow(1), out, 40);
   assert.equal(out[3], 40);
   assert.ok(seaTint(1.0, -1, 1) > seaTint(-1.0, -1, 1));
   assert.ok(seaTint(3.0, -1, 1) > seaTint(1.0, -1, 1));       // surge reads stronger than any tide
@@ -118,8 +120,47 @@ test("paintWindow tints open water only when asked, and more at a higher tide", 
 
 test("paintWindow with a stride samples every nth cell", () => {
   const g = grid([encode(1, 1), encode(9, 9), encode(1, 1), encode(9, 9)]), out = new Uint8ClampedArray(2 * 4);
-  const wet = paintWindow(g, toCm(2), { c0: 0, r0: 0, ow: 2, oh: 1, stride: 2, width: 4, height: 1 }, out);
+  const wet = paintWindow(one(g, 4), toCm(2), { c0: 0, r0: 0, ow: 2, oh: 1, stride: 2, width: 4, height: 1 }, out);
   assert.equal(wet, 2);                 // cells 0 and 2; the 9 m cells are skipped
+});
+
+test("paintWindow stitches tiles together and leaves a missing tile clear", () => {
+  // A 4 x 2 grid cut into two 2 x 2 tiles; the right-hand tile has not loaded.
+  const left = grid([encode(1, 1), encode(1, 1), encode(1, 1), encode(9, 9)]);
+  const right = grid([encode(1, 1), encode(1, 1), encode(1, 1), encode(1, 1)]);
+  const w = { c0: 0, r0: 0, ow: 4, oh: 2, stride: 1, width: 4, height: 2 }, out = new Uint8ClampedArray(8 * 4);
+  const both = { tile: 2, get: (tx, ty) => (ty === 0 ? [left, right][tx] ?? null : null) };
+  assert.equal(paintWindow(both, toCm(2), w, out), 7);
+  assert.equal(out[(1 * 4 + 1) * 4 + 3], 0);                 // the 9 m cell, bottom-right of the left tile
+  const leftOnly = { tile: 2, get: (tx, ty) => (tx === 0 && ty === 0 ? left : null) };
+  assert.equal(paintWindow(leftOnly, toCm(2), w, out), 3);
+  for (const ox of [2, 3]) for (const oy of [0, 1]) assert.equal(out[(oy * 4 + ox) * 4 + 3], 0);
+});
+
+test("tilesFor lists every tile a window touches, nearest the middle first", () => {
+  const w = { c0: 900, r0: 100, ow: 1300, oh: 400, stride: 1, width: 7600, height: 9500 };
+  const tiles = tilesFor(w, 1024);
+  assert.deepEqual(tiles.map(t => t.join(",")).sort(), ["0,0", "1,0", "2,0"]);
+  assert.deepEqual(tiles[0], [1, 0]);
+  // a stride widens what the window covers
+  assert.equal(tilesFor({ ...w, stride: 4 }, 1024).length, 12);
+});
+
+test("reachedFromTable counts thresholds strictly below the level", () => {
+  const cm = [120, 150, 151, 300], count = [2, 5, 9, 10];
+  assert.equal(reachedFromTable(cm, count, 100), 0);
+  assert.equal(reachedFromTable(cm, count, 120), 0);         // water exactly at the threshold: not reached
+  assert.equal(reachedFromTable(cm, count, 121), 2);
+  assert.equal(reachedFromTable(cm, count, 151), 5);
+  assert.equal(reachedFromTable(cm, count, 9999), 10);
+  assert.equal(reachedFromTable([], [], 500), 0);
+});
+
+test("regionAt picks the stretch of coast a point falls in", () => {
+  const meta = { regions: [{ id: "south", bbox: [-73.78, 40.53, -73.42, 40.76] }, { id: "north", bbox: [-73.78, 40.76, -73.42, 40.93] }] };
+  assert.equal(regionAt(meta, -73.63, 40.63).id, "south");
+  assert.equal(regionAt(meta, -73.7, 40.83).id, "north");
+  assert.equal(regionAt(meta, -74.0, 40.7), null);
 });
 
 const META = { bbox: [-73.745, 40.573, -73.572, 40.66], dem: { width: 3655, height: 2421 } };
