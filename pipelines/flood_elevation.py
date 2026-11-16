@@ -17,8 +17,8 @@ Outputs (prefix = --out, e.g. data/long-beach)
   <prefix>-buildings.geojson
                            one polygon per footprint, with
                              g  = median ground elevation under the footprint (m NAVD88)
-                             lo = 5th-percentile ground within 2 m of it — a
-                                  stand-in for "lowest adjacent grade"
+                             lo = 10th-percentile ground (water excluded) within
+                                  2 m of it — a stand-in for "lowest adjacent grade"
                              w  = water level at which the sea first reaches it
                                   (>= lo; higher when something shelters it)
                              h  = building height from OSM (m above ground), if any
@@ -148,22 +148,29 @@ def shape_of(geometry):
 def write_grid(dem, tf, crs, bbox, cell_m: float, out_png: Path, sea_below: float = SEA_BELOW_M,
                pmtiles_path: str | None = None):
     """Average the 1 m DEM onto a Web-Mercator grid and encode it as a PNG."""
+    dem = np.asarray(dem)
     x0, y0 = merc(bbox[0], bbox[1])
     x1, y1 = merc(bbox[2], bbox[3])
     scale = math.cos(math.radians((bbox[1] + bbox[3]) / 2))   # mercator units per ground metre
     w = round((x1 - x0) * scale / cell_m)
     h = round((y1 - y0) * scale / cell_m)
-    dst = np.full((h, w), np.nan, dtype="float32")
     dst_tf = from_bounds(x0, y0, x1, y1, w, h)
-    reproject(
-        source=dem, destination=dst,
-        src_transform=tf, src_crs=crs, src_nodata=np.nan,
-        dst_transform=dst_tf, dst_crs="EPSG:3857", dst_nodata=np.nan,
-        resampling=Resampling.average,
-    )
-    # Sea = no data (open ocean), ground below the tidal threshold, or anything
-    # the basemap itself draws as water.
-    sea = np.isnan(dst) | (dst < sea_below)
+
+    def to_grid(src):
+        out = np.full((h, w), np.nan, dtype="float32")
+        reproject(source=src, destination=out, src_transform=tf, src_crs=crs, src_nodata=np.nan,
+                  dst_transform=dst_tf, dst_crs="EPSG:3857", dst_nodata=np.nan, resampling=Resampling.average)
+        return out
+
+    # Average LAND ONLY. A cell on a canal edge is part yard, part water; a plain
+    # average would drag the yard down toward the water surface and make every
+    # bulkhead look half a metre lower than it is. So water is masked out at
+    # 1 m first, and a cell counts as land when at least half of it is land.
+    water_1m = np.isnan(dem) | (dem < sea_below)
+    dst = to_grid(np.where(water_1m, np.nan, dem))
+    land_share = to_grid(np.where(water_1m, 0.0, 1.0).astype("float32"))
+    # Sea = mostly water at 1 m, or anything the basemap itself draws as water.
+    sea = np.isnan(dst) | ~(land_share >= 0.5)
     if pmtiles_path:
         sea |= ~basemap_land(pmtiles_path, bbox, dst.shape, dst_tf)
     fill = connected_fill(dst, sea)
@@ -250,7 +257,8 @@ def reprojector(src, dst):
     return lambda a: np.column_stack(transform(src, dst, a[:, 0], a[:, 1])[:2])
 
 
-def building_elevations(dem, tf, crs, bbox, pmtiles_path: str, fill, fill_tf, pad_m: float = 0.4):
+def building_elevations(dem, tf, crs, bbox, pmtiles_path: str, fill, fill_tf, pad_m: float = 0.4,
+                        sea_below: float = SEA_BELOW_M):
     inv = ~tf
     finv = ~fill_tf
     to_utm, to_ll, to_merc = reprojector("EPSG:4326", crs), reprojector(crs, "EPSG:4326"), reprojector(crs, "EPSG:3857")
@@ -275,10 +283,12 @@ def building_elevations(dem, tf, crs, bbox, pmtiles_path: str, fill, fill_tf, pa
         wtf = tf * rasterio.Affine.translation(c0, r0)
         inside = features.geometry_mask([mapping(utm)], win.shape, wtf, invert=True, all_touched=True)
         around = features.geometry_mask([mapping(ring)], win.shape, wtf, invert=True, all_touched=True)
+        # Ground only: a waterfront building's surroundings include the canal
+        # itself, and the flattened water surface is not grade.
         under = win[inside]
-        under = under[~np.isnan(under)]
+        under = under[~np.isnan(under) & (under >= sea_below)]
         near = win[around]
-        near = near[~np.isnan(near)]
+        near = near[~np.isnan(near) & (near >= sea_below)]
         if under.size < 4 or near.size < 4:
             skipped += 1
             continue
@@ -286,7 +296,7 @@ def building_elevations(dem, tf, crs, bbox, pmtiles_path: str, fill, fill_tf, pa
         # extrusion of the same footprint (no z-fighting when both are drawn).
         padded = utm.buffer(pad_m, join_style=2)
         ll = shapely.transform(padded, to_ll)
-        lo = float(np.percentile(near, 5))
+        lo = float(np.percentile(near, 10))
         # When does the sea reach it? Lowest connected-fill level touching the
         # footprint's surroundings, on the coarser grid.
         mx0, my0, mx1, my1 = shapely.transform(ring, to_merc).bounds
@@ -326,7 +336,7 @@ def main() -> None:
 
     dem, tf, crs = load_mosaic(a.dem, bbox)
     grid, fill, fill_tf = write_grid(dem, tf, crs, bbox, a.cell, prefix.with_name(prefix.name + "-dem.png"), a.sea_below, a.pmtiles)
-    feats, skipped = building_elevations(dem, tf, crs, bbox, a.pmtiles, fill, fill_tf)
+    feats, skipped = building_elevations(dem, tf, crs, bbox, a.pmtiles, fill, fill_tf, sea_below=a.sea_below)
     total = len(feats)
     feats = [f for f in feats if f["properties"]["lo"] <= a.max_ground]
     fc = {"type": "FeatureCollection", "features": feats}

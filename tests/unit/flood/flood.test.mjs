@@ -52,23 +52,23 @@ test("wet is strict: water exactly at the threshold is dry", () => {
   assert.equal(isWet(reach[0], reach[0] + 1), true);
 });
 
-test("nearly-under bands are 1, 2 and 3 feet of margin", () => {
+test("nearly-under bands are a half, one and one-and-a-half feet of margin", () => {
   const level = toCm(1.0);
   const kind = marginFt => classify(level + Math.round(marginFt * 30.48), level);
   assert.equal(classify(level - 1, level), WET);
   assert.equal(kind(0), NEAR_1);          // water exactly at the edge: not yet wet, but closest band
-  assert.equal(kind(0.5), NEAR_1);
-  assert.equal(kind(1.5), NEAR_2);
-  assert.equal(kind(2.5), NEAR_3);
-  assert.equal(kind(3.5), DRY);
+  assert.equal(kind(0.25), NEAR_1);
+  assert.equal(kind(0.75), NEAR_2);
+  assert.equal(kind(1.25), NEAR_3);
+  assert.equal(kind(1.75), DRY);
 });
 
 test("a low yard behind a bulkhead is flagged by the bulkhead, not by its own height", () => {
   // yard at 0.5 m, protected until the water reaches 2.0 m
   const { reach } = grid([encode(0.5, 2.0)]);
   assert.equal(classify(reach[0], toCm(0.6)), DRY);      // 1.4 m (4.6 ft) of protection left
-  assert.equal(classify(reach[0], toCm(1.5)), NEAR_2);   // 0.5 m (1.6 ft) left
-  assert.equal(classify(reach[0], toCm(1.9)), NEAR_1);
+  assert.equal(classify(reach[0], toCm(1.65)), NEAR_3);  // 0.35 m (1.1 ft) left
+  assert.equal(classify(reach[0], toCm(1.9)), NEAR_1);   // 0.1 m (4 in) left
   assert.equal(classify(reach[0], toCm(2.1)), WET);
 });
 

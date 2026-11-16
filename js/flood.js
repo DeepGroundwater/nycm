@@ -49,8 +49,12 @@ export const toCm = m => Math.round(m * 100);
 /** A land cell is wet when the water is above the level at which the sea reaches it. */
 export const isWet = (reachCm, levelCm) => reachCm !== SEA && reachCm < levelCm;
 
-/** Land within this many feet above the water is flagged as "nearly under". */
-export const NEAR_FT = [1, 2, 3];
+/**
+ * Land within this many feet above the water is flagged as "nearly under".
+ * Kept tight on purpose: at the benchmark gauge an ordinary high tide and a
+ * major flood are only about 2.5 ft apart, so wider bands would cry wolf daily.
+ */
+export const NEAR_FT = [0.5, 1, 1.5];
 const NEAR_CM = NEAR_FT.map(ft => Math.round(ft * 30.48));
 
 export const DRY = 0, NEAR_1 = 1, NEAR_2 = 2, NEAR_3 = 3, WET = 4, WATER = 5;
