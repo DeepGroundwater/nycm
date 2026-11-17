@@ -165,9 +165,20 @@ export function reachedFromTable(cm, count, levelCm) {
   return lo ? count[lo - 1] : 0;
 }
 
-/** The region (a stretch of coast with its own gauge) holding a point, or null. */
+/**
+ * The region a point belongs to: the stretch of coast that answers to the
+ * nearest benchmark gauge. Null outside the dataset.
+ */
 export function regionAt(meta, lng, lat) {
-  return meta.regions?.find(r => lng >= r.bbox[0] && lng < r.bbox[2] && lat >= r.bbox[1] && lat < r.bbox[3]) ?? null;
+  const [w, s, e, n] = meta.bbox;
+  if (!(lng >= w && lng <= e && lat >= s && lat <= n) || !meta.regions?.length) return null;
+  const kx = Math.cos((s + n) / 2 * Math.PI / 180);
+  let best = null, bestD = Infinity;
+  for (const r of meta.regions) {
+    const d = ((lng - r.at[0]) * kx) ** 2 + (lat - r.at[1]) ** 2;
+    if (d < bestD) { bestD = d; best = r; }
+  }
+  return best;
 }
 
 /** How strongly to tint open water: faint at the lowest tide, strong at the highest and beyond. */
@@ -183,9 +194,10 @@ export function countReached(thresholds, level) {
   return n;
 }
 
-export function createFlood(map, maplibregl, { metaUrl = "data/flood/nassau/index.json", onChange = () => {} } = {}) {
-  const MAX_TILES = 24;              // terrain tiles kept in memory (about 4 MB each)
-  const MIN_ZOOM = 10.5;             // below this a view spans too many tiles to be worth painting
+export function createFlood(map, maplibregl, { metaUrl = "data/flood/metro/index.json", onChange = () => {} } = {}) {
+  const MAX_TILES = 30;              // terrain tiles kept in memory (about 4 MB each)
+  const MIN_ZOOM = 10.5;             // below this a view always spans too many tiles
+  let tooFar = false;                // the view needs more tiles than MAX_TILES: nothing is painted
   const BUILDING_ZOOM = 13;
   let meta = null, base = null, canvas = null, ctx = null, image = null, win = null;
   let tideLow = -1.14, tideHigh = 1.02;      // m NAVD88; refined by setTideRange()
@@ -261,8 +273,12 @@ export function createFlood(map, maplibregl, { metaUrl = "data/flood/nassau/inde
   // the size of the dataset. Called when the level changes, the map moves, or a tile arrives.
   function paintWater() {
     const b = map.getBounds();
-    const next = map.getZoom() < MIN_ZOOM ? null
+    let next = map.getZoom() < MIN_ZOOM ? null
       : gridWindow(meta, { west: b.getWest(), south: b.getSouth(), east: b.getEast(), north: b.getNorth() });
+    // A view wider than the tile budget is left blank rather than painted in
+    // patches: half a picture of a flood is worse than none.
+    tooFar = map.getZoom() < MIN_ZOOM || (next !== null && tilesFor(next, meta.dem.tile).length > MAX_TILES);
+    if (tooFar) next = null;
     if (!next) {
       if (canvas.width !== 2) { canvas.width = canvas.height = 2; push(false); }     // clear
       win = null;
@@ -270,7 +286,7 @@ export function createFlood(map, maplibregl, { metaUrl = "data/flood/nassau/inde
     }
     const moved = !win || next.c0 !== win.c0 || next.r0 !== win.r0 || next.ow !== win.ow || next.oh !== win.oh || next.stride !== win.stride;
     win = next;
-    const needed = tilesFor(win, meta.dem.tile).slice(0, MAX_TILES);
+    const needed = tilesFor(win, meta.dem.tile);
     for (const [tx, ty] of needed) wantTile(tx, ty);
     if (canvas.width !== win.ow || canvas.height !== win.oh) {
       canvas.width = win.ow; canvas.height = win.oh;
@@ -323,7 +339,7 @@ export function createFlood(map, maplibregl, { metaUrl = "data/flood/nassau/inde
     const region = currentRegion();
     const reached = cm => (region ? reachedFromTable(region.reach_cm, region.reach_count, cm) : 0);
     return { level, region, wet: reached(toCm(level)), active: reached(toCm(level + NEAR_FT[2] * M_PER_FT)),
-             total: region?.buildings_total ?? meta.buildings.count_total, meta };
+             total: region?.buildings_total ?? meta.buildings.count_total, tooFar, meta };
   }
   function report() {
     const st = stats();

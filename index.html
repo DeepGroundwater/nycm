@@ -111,6 +111,7 @@
   .flood-stages { margin-top: 5px; display: flex; flex-wrap: wrap; gap: 2px 8px; font-size: 9.5px; font-weight: 600; color: var(--muted); font-variant-numeric: tabular-nums; }
   .flood-stages span::before { content: ""; display: inline-block; width: 7px; height: 7px; border-radius: 2px; margin-right: 3px; background: var(--c); vertical-align: -0.5px; }
   .flood-stages span.event::before { width: 0; height: 0; border-radius: 0; background: none; border: 3.5px solid transparent; border-top: 6px solid var(--ink); border-bottom: 0; vertical-align: -2px; }
+  .flood-zoom { margin-top: 8px; padding: 5px 8px; border-radius: 6px; font-size: 11px; font-weight: 600; background: color-mix(in srgb, var(--ink) 8%, transparent); }
   .flood-freq { margin-top: 2px; font-size: 10.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
   .flood-stat b { font-weight: 650; }
   .tide { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--chip-border); max-width: 240px; }
@@ -353,6 +354,7 @@
     <div class="flood-scale"><span>0</span><span id="floodScale">ft MLLW at Hog Island (HOGN6)</span><span>16</span></div>
     <div class="flood-stages" id="floodStages"></div>
 
+    <div class="flood-zoom" id="floodZoom" hidden>Zoom in to see the water on the map.</div>
     <div class="flood-stat" id="floodStat">—</div>
     <div class="flood-freq" id="floodFreq"></div>
     <div class="flood-legend">
@@ -1542,7 +1544,8 @@
       document.getElementById("floodStat").innerHTML =
         `${st.wet.toLocaleString()} of ${st.total.toLocaleString()} buildings reached` +
         (stage ? ` · <b style="color:${STAGE_COLOR[stage]}">${stage} flood stage</b>` : gauge ? " · below flood stage" : "");
-      document.getElementById("floodPlace").textContent = st.region ? `${st.region.name}, ${st.meta.name.split(",")[0]}` : st.meta.name.split(",")[0];
+      document.getElementById("floodPlace").textContent = st.region?.name ?? st.meta.name;
+      document.getElementById("floodZoom").hidden = !st.tooFar;
       if (gauge) {
         const n = daysReaching(ft), r = gauge.record;
         const span = `${r.from.slice(0, 4)}–${r.to.slice(0, 4)}`, top = r.highest_days[0];
@@ -1553,7 +1556,7 @@
             : `Higher than anything the gauge recorded, ${span} (${top.ft} ft).`;
       }
       document.getElementById("floodNote").textContent =
-        `Still water only — no waves, flow or drainage. Ground: ${st.meta.source.split(",")[0]}, 2024 lidar. ` +
+        `Still water only — no waves, flow or drainage. Ground: USGS 3DEP 1 m lidar (Nassau County 2024, New York City 2013–14). ` +
         (gauge ? `Stages and record: NOAA ${gauge.id}${gauge.usgs ? ` / USGS ${gauge.usgs}` : gauge.coops ? ` / station ${gauge.coops}` : ""}. ` : "") +
         (tide.floodTable ? `Tide: NOAA prediction, calibrated to the gauge; weather not included.` : "");
     },
@@ -1620,7 +1623,7 @@
 
     function load() {
       loading ??= Promise.all([
-        fetch("data/nassau-tides.json").then(r => r.json()),
+        fetch("data/tide-stations.json").then(r => r.json()),
       ]).then(([d]) => {
         doc = d;
         const now = Date.now();
@@ -1897,7 +1900,7 @@
       if (gauge?.event) { evBtn.textContent = gauge.event.label; evBtn.title = `Replay what the gauge recorded, ${gauge.event.label}`; }
       if (!floodOn && replay) { window48(); time = Date.now(); }
       noteEl.hidden = !stationsOn;
-      noteEl.textContent = `${stations.length} NOAA stations around ${doc.name.split(",")[0]}. Astronomical tide only — weather is not included. Tap a station for its curve.`;
+      noteEl.textContent = `${stations.length} NOAA stations, ${doc.name}. Astronomical tide only — weather is not included. Tap a station for its curve.`;
       if (first) { time = Date.now(); window48(); }
       apply();
     }

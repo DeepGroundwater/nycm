@@ -25,19 +25,22 @@ Outputs, in the --out directory
                              h  = building height from OSM (m above ground), if any
 
 Regions
-  A region is a stretch of coast that answers to one tide gauge. For each,
-  index.json carries the gauge and tide files the map should use there and a
-  table of how many buildings the sea reaches at each level, so the map can
-  report counts without loading every building.
+  A region is the stretch of coast that answers to one tide gauge: every point
+  belongs to the gauge nearest to it. For each gauge, index.json carries the
+  gauge and tide files the map should use there and a table of how many
+  buildings the sea reaches at each level, so the map can report counts
+  without loading every building.
 
 Usage
-  python pipelines/flood_elevation.py --dem lidar/*.tif \
-      --bbox=-73.78,40.573,-73.42,40.915 --out data/flood/nassau --name "Nassau County, NY" \
-      --region "south:South shore bays:-73.78,40.53,-73.42,40.76:data/hog-island-gauge.json:data/long-beach-tide.json" \
-      --region "north:North shore:-73.78,40.76,-73.42,40.93:data/kings-point-gauge.json:data/kings-point-tide.json" \
-      --source "USGS 3DEP 1 m, NY_LongIsland_A24 (lidar flown Mar-Apr 2024)"
+  python pipelines/flood_elevation.py --dem lidar/newest/*.tif lidar/older/*.tif \
+      --bbox=-74.27,40.49,-73.42,40.92 --out data/flood/metro --name "New York City and Nassau County" \
+      --gauge "HOGN6:South shore bays:-73.6561,40.6089:data/hog-island-gauge.json:data/long-beach-tide.json" \
+      --gauge "BATN6:New York Harbor:-74.0142,40.7006:data/gauges/BATN6.json:data/gauges/BATN6-tide.json" \
+      --source "USGS 3DEP 1 m: NY_LongIsland_A24 (2024), NY_CMPG_2013 (2013-14)"
 
-Requires: rasterio numpy pillow shapely pmtiles mapbox-vector-tile scikit-image
+  Where lidar tiles overlap, the first one listed wins: list the newest survey first.
+
+Requires: rasterio numpy pillow shapely pmtiles mapbox-vector-tile scikit-image numba
 """
 from __future__ import annotations
 
@@ -68,7 +71,10 @@ OFFSET_M = 20.0          # stored value = (elevation + OFFSET) in centimetres
 SEA_BELOW_M = -0.3
 SILL_STEP_M = 0.02       # resolution of the B-channel sill (max 5.1 m)
 TILE = 1024              # cells per side of an output tile
-NO_LIDAR_M = 600.0       # stand-in elevation for land with no lidar: above anything the map can flood
+NO_LIDAR_M = 300.0       # stand-in elevation for land with no lidar: above anything the map can flood
+SEA_CM = -32768          # centimetre grids: marker for sea
+NEVER_CM = 32767         # centimetre grids: the sea never reaches this cell within the cap
+FLOOD_CAP_M = 7.0        # connectivity is traced up to this level; the map's slider stops well below it
 R_MERC = 6378137.0
 
 
@@ -82,7 +88,7 @@ class Lidar:
     so a county never fits in memory at once: callers take them one by one."""
 
     def __init__(self, paths: list[str]):
-        self.paths = sorted(paths)
+        self.paths = list(paths)               # order matters: earlier tiles win where they overlap
         self.bounds = []
         for p in self.paths:
             with rasterio.open(p) as src:
@@ -130,10 +136,15 @@ def basemap_land(pmtiles_path: str, bbox, shape, dst_tf, z: int = 14):
     The lidar reaches further seaward than the map's coastline (it was flown
     near low tide), which would paint "flood" on what the map already draws as
     ocean. Clipping to the basemap's land keeps the two shorelines identical.
+
+    Done one basemap tile at a time, into that tile's window of the grid, so
+    memory stays flat however large the area.
     """
     n = 2 ** z
     world = 2 * math.pi * R_MERC
-    shapes = []
+    land = np.zeros(shape, dtype="uint8")
+    inv = ~dst_tf
+    found = False
     with open(pmtiles_path, "rb") as f:
         reader = Reader(MmapSource(f))
         xs, ys = tile_range(bbox, z)
@@ -153,14 +164,22 @@ def basemap_land(pmtiles_path: str, bbox, shape, dst_tf, z: int = 14):
                     return np.column_stack(((x + a[:, 0] / ext) / n * world - world / 2,
                                             world / 2 - (y + a[:, 1] / ext) / n * world))
 
-                for feat in layer["features"]:
-                    geom = shape_of(feat["geometry"])
-                    if geom is not None:
-                        shapes.append(mapping(shapely.transform(geom, to_merc)))
-    if not shapes:
-        return np.ones(shape, dtype=bool)
-    return features.rasterize(shapes, out_shape=shape, transform=dst_tf, fill=0, default_value=1,
-                              all_touched=False, dtype="uint8").astype(bool)
+                shapes = [mapping(shapely.transform(g, to_merc)) for g in (shape_of(ft["geometry"]) for ft in layer["features"]) if g is not None]
+                if not shapes:
+                    continue
+                found = True
+                # This tile's footprint on the grid, with a cell of margin.
+                c0, r0 = (int(math.floor(v)) - 1 for v in inv * (x / n * world - world / 2, world / 2 - y / n * world))
+                c1, r1 = (int(math.ceil(v)) + 1 for v in inv * ((x + 1) / n * world - world / 2, world / 2 - (y + 1) / n * world))
+                c0, r0, c1, r1 = max(c0, 0), max(r0, 0), min(c1, shape[1]), min(r1, shape[0])
+                if c1 <= c0 or r1 <= r0:
+                    continue
+                win = features.rasterize(shapes, out_shape=(r1 - r0, c1 - c0), transform=dst_tf * rasterio.Affine.translation(c0, r0),
+                                         fill=0, default_value=1, all_touched=False, dtype="uint8")
+                np.maximum(land[r0:r1, c0:c1], win, out=land[r0:r1, c0:c1])
+    if not found:
+        land[:] = 1
+    return land.view(bool)
 
 
 def shape_of(geometry):
@@ -173,7 +192,9 @@ def shape_of(geometry):
 def build_grid(lidar: Lidar, bbox, cell_m: float, sea_below: float = SEA_BELOW_M, pmtiles_path: str | None = None):
     """Average the 1 m DEM onto a Web-Mercator grid, one lidar tile at a time.
 
-    Returns (ground with NaN for sea, sea mask, connected-fill level, grid transform).
+    Returns (ground, reach level, grid transform); both grids are int16 centimetres
+    NAVD88 with SEA_CM for sea, and reach is NEVER_CM where the sea cannot get to
+    a cell below FLOOD_CAP_M.
     """
     x0, y0 = merc(bbox[0], bbox[1])
     x1, y1 = merc(bbox[2], bbox[3])
@@ -219,34 +240,45 @@ def build_grid(lidar: Lidar, bbox, cell_m: float, sea_below: float = SEA_BELOW_M
     # Sea = mostly water at 1 m, or anything the basemap itself draws as water.
     no_lidar = np.isnan(land_share)
     sea = ~no_lidar & ~(land_share >= 0.5)
+    del land_share
     if pmtiles_path:
         land = basemap_land(pmtiles_path, bbox, ground.shape, dst_tf)
         sea |= ~land
-        # Land the basemap knows but this lidar project does not cover (across a
-        # county line, say) is UNKNOWN, not water. Calling it sea would let the
-        # flood leak in from a coast that is not there; so it stands as a wall:
-        # never flooded, never a path. Water that really arrives that way is missed.
+        # Land the basemap knows but this lidar does not cover is UNKNOWN, not
+        # water. Calling it sea would let the flood leak in from a coast that is
+        # not there; so it stands as a wall: never flooded, never a path. Water
+        # that really arrives that way is missed.
         ground[no_lidar & land] = NO_LIDAR_M
+        del land
     else:
         sea |= no_lidar
-    fill = connected_fill(ground, sea)
-    return np.where(sea, np.nan, ground), sea, np.where(sea, np.nan, fill), dst_tf
+    del no_lidar
+    # From here on the grid is integer centimetres: a third of the memory of
+    # floats, which is what lets a whole metro area fit.
+    elev_cm = np.clip(np.rint(np.nan_to_num(ground, nan=0.0) * 100), -32000, 32000).astype("int16")
+    del ground
+    elev_cm[sea] = SEA_CM
+    del sea
+    reach_cm = connected_fill_cm(elev_cm, int(FLOOD_CAP_M * 100))
+    return elev_cm, reach_cm, dst_tf
 
 
-def write_tiles(ground, sea, fill, out_dir: Path, max_reach_m: float):
+def write_tiles(elev_cm, reach_cm, out_dir: Path, max_reach_m: float):
     """Cut the grid into TILE x TILE PNGs. A tile is kept when it holds open water
-    or any land the sea could reach within the map's range; the rest of the
-    county is high ground the map never needs."""
-    h, w = ground.shape
+    or any land the sea could reach within the map's range; the rest is high
+    ground the map never needs."""
+    h, w = elev_cm.shape
     kept = []
+    limit = int(max_reach_m * 100)
     for ty in range(math.ceil(h / TILE)):
         for tx in range(math.ceil(w / TILE)):
             sl = np.s_[ty * TILE:(ty + 1) * TILE, tx * TILE:(tx + 1) * TILE]
-            s_, f_ = sea[sl], fill[sl]
-            if not (s_.any() or np.nanmin(np.where(s_, np.inf, f_), initial=np.inf) <= max_reach_m):
+            e_, r_ = elev_cm[sl], reach_cm[sl]
+            s_ = e_ == SEA_CM
+            if not (s_.any() or (r_[~s_] <= limit).any()):
                 continue
             rgb = np.zeros((TILE, TILE, 3), dtype="uint8")        # padding decodes as sea
-            part = encode_grid(np.where(s_, 0, ground[sl]), s_, np.where(s_, 0, f_))
+            part = encode_grid(np.where(s_, 0, e_) / 100.0, s_, np.where(s_, 0, r_) / 100.0)
             rgb[:part.shape[0], :part.shape[1]] = part
             Image.fromarray(rgb, "RGB").save(out_dir / f"dem-{tx}-{ty}.png", optimize=True)
             kept.append([tx, ty])
@@ -265,6 +297,65 @@ def connected_fill(elev, sea):
     seed = np.where(sea, -50.0, float(ground.max()) + 1).astype("float32")
     cross = np.array([[0, 1, 0], [1, 1, 1], [0, 1, 0]], dtype=bool)   # 4-connected: no diagonal leaks
     return reconstruction(seed, ground, method="erosion", footprint=cross)
+
+
+def connected_fill_cm(elev_cm, cap_cm: int):
+    """connected_fill() for big grids: the same minimax-path level, in integer
+    centimetres, by a bucket-queue priority flood (one bucket per centimetre).
+
+    Water rises one centimetre at a time; each cell is settled the first time
+    the flood front arrives, at max(own ground, level of the front). Linear time
+    and about 6 bytes a cell, where the morphological version needs dozens.
+    Cells above `cap_cm` are not traced: they get their own ground, and low
+    ground the sea cannot reach below the cap gets NEVER_CM.
+    """
+    try:
+        from numba import njit
+    except ImportError as err:      # pragma: no cover
+        raise SystemExit("connected_fill_cm needs numba (pip install numba)") from err
+
+    @njit(cache=False)
+    def flood(elev, cap, sea, never):
+        h, w = elev.shape
+        lo = -3300
+        reach = np.full((h, w), never, np.int16)
+        nxt = np.full(h * w, -1, np.int32)
+        head = np.full(cap - lo + 1, -1, np.int32)
+        for r in range(h):
+            for c in range(w):
+                e = elev[r, c]
+                if e == sea:
+                    reach[r, c] = sea
+                elif e > cap:
+                    reach[r, c] = e
+                elif ((r > 0 and elev[r - 1, c] == sea) or (r < h - 1 and elev[r + 1, c] == sea)
+                      or (c > 0 and elev[r, c - 1] == sea) or (c < w - 1 and elev[r, c + 1] == sea)):
+                    reach[r, c] = e                          # on the shore: floods at its own height
+                    i = r * w + c
+                    nxt[i] = head[e - lo]
+                    head[e - lo] = i
+        for b in range(cap - lo + 1):
+            level = b + lo
+            while head[b] != -1:
+                i = head[b]
+                head[b] = nxt[i]
+                r, c = i // w, i % w
+                for k in range(4):                           # 4-connected: no diagonal leaks
+                    rr = r + (1 if k == 0 else -1 if k == 1 else 0)
+                    cc = c + (1 if k == 2 else -1 if k == 3 else 0)
+                    if rr < 0 or rr >= h or cc < 0 or cc >= w:
+                        continue
+                    e = elev[rr, cc]
+                    if e == sea or e > cap or reach[rr, cc] != never:
+                        continue
+                    v = e if e > level else level
+                    reach[rr, cc] = v
+                    j = rr * w + cc
+                    nxt[j] = head[v - lo]
+                    head[v - lo] = j
+        return reach
+
+    return flood(np.ascontiguousarray(elev_cm), cap_cm, SEA_CM, NEVER_CM)
 
 
 def tile_range(bbox, z: int):
@@ -329,7 +420,7 @@ def reprojector(src, dst):
 
 
 def building_elevations(lidar: Lidar, bbox, pmtiles_path: str, fill, fill_tf, pad_m: float = 0.4,
-                        sea_below: float = SEA_BELOW_M):
+                        sea_below: float = SEA_BELOW_M, keep_below: float = float("inf")):
     """Ground elevation and reach level for every footprint.
 
     Footprints are first sorted into the lidar tile that holds their centre, so
@@ -390,12 +481,17 @@ def building_elevations(lidar: Lidar, bbox, pmtiles_path: str, fill, fill_tf, pa
             fc0, fr0 = (int(v) for v in finv * (mx0, my1))
             fc1, fr1 = (int(math.ceil(v)) for v in finv * (mx1, my0))
             fwin = fill[max(fr0, 0):fr1 + 1, max(fc0, 0):fc1 + 1]
-            reach = float(np.nanmin(fwin)) if fwin.size and not np.all(np.isnan(fwin)) else lo
+            fwin = fwin[fwin != SEA_CM]
+            reach = float(fwin.min()) / 100.0 if fwin.size else lo
             p = {"g": round(float(np.median(under)), 2), "lo": round(lo, 2), "w": round(max(lo, reach), 2)}
             if props.get("height"):
                 p["h"] = round(float(props["height"]), 1)
             centre = ll.centroid
             col, row = finv * merc(centre.x, centre.y)
+            if lo > keep_below:
+                # High ground: the map never draws it, so keep only what the totals need.
+                out.append({"properties": {"lo": p["lo"], "w": p["w"]}, "_at": (centre.x, centre.y)})
+                continue
             out.append({"type": "Feature", "properties": p,
                         "geometry": {"type": "Polygon",
                                      "coordinates": [[[round(x, 6), round(y, 6)] for x, y in r.coords]
@@ -425,8 +521,8 @@ def main() -> None:
     ap.add_argument("--max-ground", type=float, default=4.6,
                     help="leave out buildings and terrain tiles the sea cannot reach below this level (m NAVD88): "
                          "the map's slider tops out below it")
-    ap.add_argument("--region", action="append", default=[],
-                    help="id:name:minLon,minLat,maxLon,maxLat:gauge.json:tide.json — a stretch of coast and the gauge it answers to")
+    ap.add_argument("--gauge", action="append", default=[],
+                    help="id:name:lng,lat:gauge.json:tide.json — a benchmark gauge; each point answers to the nearest one")
     ap.add_argument("--view", default=None,
                     help="camera for the map's 'take me there': lng,lat,zoom[,pitch[,bearing]]")
     ap.add_argument("--name", default="")
@@ -439,23 +535,35 @@ def main() -> None:
         old.unlink()
 
     lidar = Lidar(a.dem)
-    ground, sea, fill, grid_tf = build_grid(lidar, bbox, a.cell, a.sea_below, a.pmtiles)
-    dem_tiles = write_tiles(ground, sea, fill, out, a.max_ground)
-    feats, skipped = building_elevations(lidar, bbox, a.pmtiles, fill, grid_tf, sea_below=a.sea_below)
+    elev_cm, reach_cm, grid_tf = build_grid(lidar, bbox, a.cell, a.sea_below, a.pmtiles)
+    dem_tiles = write_tiles(elev_cm, reach_cm, out, a.max_ground)
+    h, w = elev_cm.shape
+    land_fraction = float((elev_cm != SEA_CM).mean())
+    del elev_cm
+    feats, skipped = building_elevations(lidar, bbox, a.pmtiles, reach_cm, grid_tf, sea_below=a.sea_below,
+                                         keep_below=a.max_ground)
 
+    # Each building answers to the nearest gauge.
+    gauges = []
+    for spec in a.gauge:
+        rid, name, at, gauge, tide = spec.split(":")
+        gauges.append({"id": rid, "name": name, "at": [float(v) for v in at.split(",")], "gauge": gauge, "tide": tide})
     regions = []
-    for spec in a.region:
-        rid, name, box, gauge, tide = spec.split(":")
-        rb = [float(v) for v in box.split(",")]
-        inside = [f for f in feats if rb[0] <= f["_at"][0] < rb[2] and rb[1] <= f["_at"][1] < rb[3]]
-        cm, count = reach_table([f["properties"]["w"] for f in inside if f["properties"]["w"] <= a.max_ground])
-        regions.append({"id": rid, "name": name, "bbox": rb, "gauge": gauge, "tide": tide,
-                        "buildings_total": len(inside), "reach_cm": cm, "reach_count": count})
+    if gauges:
+        kx = math.cos(math.radians((bbox[1] + bbox[3]) / 2))
+        pts = np.array([f["_at"] for f in feats])
+        gat = np.array([g["at"] for g in gauges])
+        nearest = np.argmin(((pts[:, None, 0] - gat[None, :, 0]) * kx) ** 2 + (pts[:, None, 1] - gat[None, :, 1]) ** 2, axis=1)
+        w_all = np.array([f["properties"]["w"] for f in feats])
+        for i, g in enumerate(gauges):
+            mine = w_all[nearest == i]
+            cm, count = reach_table(mine[mine <= a.max_ground])
+            regions.append({**g, "buildings_total": int(mine.size), "reach_cm": cm, "reach_count": count})
 
     total = len(feats)
     by_tile: dict[tuple, list] = {}
     for f in feats:
-        if f["properties"]["lo"] > a.max_ground:
+        if "_tile" not in f:
             continue
         by_tile.setdefault(f.pop("_tile"), []).append({k: v for k, v in f.items() if not k.startswith("_")})
     bld_tiles = []
@@ -467,13 +575,12 @@ def main() -> None:
     if a.view:
         v = [float(x) for x in a.view.split(",")]
         view = {"center": v[:2], "zoom": v[2], "pitch": v[3] if len(v) > 3 else 0, "bearing": v[4] if len(v) > 4 else 0}
-    h, w = ground.shape
     meta = {
         "name": a.name,
         "bbox": bbox,
         "dem": {"url": "dem-{x}-{y}.png", "width": w, "height": h, "cell_m": a.cell, "tile": TILE, "tiles": dem_tiles,
                 "offset_m": OFFSET_M, "scale": 100, "sill_step_m": SILL_STEP_M, "sea_below_m": a.sea_below,
-                "land_fraction": float((~sea).mean())},
+                "land_fraction": land_fraction},
         "buildings": {"url": "bld-{x}-{y}.json", "tiles": bld_tiles, "count": sum(t[2] for t in bld_tiles),
                       "count_total": total, "max_ground_m": a.max_ground},
         "regions": regions,

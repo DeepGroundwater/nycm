@@ -5,7 +5,7 @@
 //   npm install --no-save @neaps/tide-predictor
 //   node scripts/build-tide-table.mjs 8516663 data/long-beach-tide.json --msl-navd88=-0.073 \
 //        --msl-navd88-source="Sandy Hook 8531680, this station's control station"
-//   node scripts/build-tide-table.mjs --bbox=-73.78,40.53,-73.41,40.93 data/nassau-tides.json \
+//   node scripts/build-tide-table.mjs --bbox=-74.27,40.49,-73.41,40.93 data/tide-stations.json \
 //        --name="Nassau County, NY"
 //
 // NOAA predicts tides as a sum of cosines, one per harmonic constituent:

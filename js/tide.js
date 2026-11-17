@@ -84,7 +84,7 @@ export function series(table, startMs, endMs, n = 200) {
   return out;
 }
 
-// ---- Many stations (data/nassau-tides.json) ----------------------------------
+// ---- Many stations (data/tide-stations.json) ----------------------------------
 // Tide tables quote heights above MLLW ("chart datum"), which every station
 // has, so the multi-station API works in metres above MLLW.
 

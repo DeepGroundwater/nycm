@@ -24,7 +24,7 @@ import { tideMsl } from "../js/tide.js";
 const args = process.argv.slice(2);
 const [lid, out] = args.filter(a => !a.startsWith("--"));
 const opt = Object.fromEntries(args.filter(a => a.startsWith("--")).map(a => { const i = a.indexOf("="); return [a.slice(2, i < 0 ? undefined : i), i < 0 ? "" : a.slice(i + 1)]; }));
-if (!lid || !out) { console.error("usage: build-gauge-benchmark.mjs <NWPS id> <out.json> [--coops=<station>] [--tide=<table.json>] [--years=3] [--event=<from>,<to>|auto] [--event-label=<text>]"); process.exit(1); }
+if (!lid || !out) { console.error("usage: build-gauge-benchmark.mjs <NWPS id> <out.json> [--coops=<station>] [--tide=<table.json>] [--years=3] [--calibrate-table] [--event=<from>,<to>|auto] [--event-label=<text>]"); process.exit(1); }
 const FT = 0.3048, DAY = 864e5, YEARS = Number(opt.years ?? 3);
 
 const gauge = await (await fetch(`https://api.water.noaa.gov/nwps/v1/gauges/${lid}`)).json();
@@ -108,6 +108,13 @@ if (opt.tide) {
   let n = 0, sum = 0, sq = 0;
   for (let i = 0; i < rows.length; i += 5) { const e = rows[i][1] * FT - tideMsl(table, rows[i][0]); n++; sum += e; sq += e * e; }
   const mean = sum / n;
+  if (opt["calibrate-table"] != null) {
+    // Write the calibration back into the tide table, so the two files agree.
+    table.msl_navd88_m = Number(mean.toFixed(3));
+    table.msl_navd88_source = `calibrated: mean of observed minus predicted over ${YEARS} years at NOAA ${lid}` +
+      `${opt.coops ? ` (station ${opt.coops})` : gauge.usgsId ? ` / USGS ${gauge.usgsId}` : ""}. Includes sea-level rise since the 1983-2001 epoch.`;
+    writeFileSync(opt.tide, JSON.stringify(table));
+  }
   calibration = {
     table_station: table.station,
     msl_navd88_m: Number(mean.toFixed(3)),

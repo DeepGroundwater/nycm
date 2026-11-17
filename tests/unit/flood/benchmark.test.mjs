@@ -9,8 +9,10 @@ import { reachedFromTable, toCm, ftToM } from "../../../js/flood.js";
 import { tideMsl } from "../../../js/tide.js";
 
 const data = name => JSON.parse(readFileSync(new URL(`../../../data/${name}`, import.meta.url)));
-const index = data("flood/nassau/index.json");
-const south = index.regions.find(r => r.id === "south"), north = index.regions.find(r => r.id === "north");
+const index = data("flood/metro/index.json");
+// Every region answers to its nearest gauge; these two are the ones with a known story.
+const south = index.regions.find(r => r.id === "HOGN6"), north = index.regions.find(r => r.id === "KPTN6");
+const fromRoot = path => JSON.parse(readFileSync(new URL(`../../../${path}`, import.meta.url)));
 const gauge = data("hog-island-gauge.json"), kings = data("kings-point-gauge.json");
 // Buildings the sea reaches on a stretch of coast, at a level in its gauge's datum (ft MLLW).
 const reachedIn = (region, g, ftMllw) => reachedFromTable(region.reach_cm, region.reach_count, toCm(ftToM(ftMllw - g.navd88_above_mllw_ft)));
@@ -55,13 +57,39 @@ test("benchmark: the Sep 2026 peak reaches several times more than the moderate 
   assert.ok(peak > 3 * moderate, `${peak} vs ${moderate}`);
 });
 
-test("each region names a gauge and a tide table that exist and agree on the calibration", () => {
-  for (const [region, g] of [[south, gauge], [north, kings]]) {
-    assert.equal(region.gauge, `data/${g === gauge ? "hog-island" : "kings-point"}-gauge.json`);
-    const table = JSON.parse(readFileSync(new URL(`../../../${region.tide}`, import.meta.url)));
-    assert.equal(table.msl_navd88_m, g.calibration.msl_navd88_m);
-    assert.equal(table.station, g.calibration.table_station);
-    assert.ok(region.buildings_total > 10000);
+test("every region has a gauge and a tide table that exist and agree on the calibration", () => {
+  assert.ok(index.regions.length >= 9);
+  const [west, southEdge, east, northEdge] = index.bbox;
+  for (const region of index.regions) {
+    const g = fromRoot(region.gauge), table = fromRoot(region.tide);
+    assert.equal(g.id, region.id);
+    assert.equal(table.msl_navd88_m, g.calibration.msl_navd88_m, region.id);
+    assert.equal(table.station, g.calibration.table_station, region.id);
+    assert.ok(g.navd88_above_mllw_ft > 2 && g.navd88_above_mllw_ft < 5, region.id);
+    assert.ok(g.record.days > 900, region.id);
+    assert.ok(region.buildings_total > 100, region.id);
+    // the gauge sits inside the dataset
+    assert.ok(region.at[0] > west && region.at[0] < east && region.at[1] > southEdge && region.at[1] < northEdge, region.id);
+  }
+});
+
+test("benchmark, every region: a typical high tide reaches under half a percent of its buildings", () => {
+  for (const region of index.regions) {
+    const g = fromRoot(region.gauge);
+    const typical = reachedIn(region, g, g.record.daily_high_ft_mllw.median);
+    assert.ok(typical / region.buildings_total < 0.005, `${region.id}: ${typical} of ${region.buildings_total}`);
+  }
+});
+
+test("benchmark, every region: more water never reaches fewer buildings", () => {
+  for (const region of index.regions) {
+    const g = fromRoot(region.gauge);
+    let prev = -1;
+    for (let ft = 0; ft <= 16; ft += 0.5) {
+      const n = reachedIn(region, g, ft);
+      assert.ok(n >= prev, region.id);
+      prev = n;
+    }
   }
 });
 

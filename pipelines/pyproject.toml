@@ -20,6 +20,7 @@ flood = [
   "pmtiles>=3.2",
   "mapbox-vector-tile>=2.0",
   "scikit-image>=0.22",
+  "numba>=0.60",
 ]
 
 [build-system]

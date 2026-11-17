@@ -156,11 +156,14 @@ test("reachedFromTable counts thresholds strictly below the level", () => {
   assert.equal(reachedFromTable([], [], 500), 0);
 });
 
-test("regionAt picks the stretch of coast a point falls in", () => {
-  const meta = { regions: [{ id: "south", bbox: [-73.78, 40.53, -73.42, 40.76] }, { id: "north", bbox: [-73.78, 40.76, -73.42, 40.93] }] };
-  assert.equal(regionAt(meta, -73.63, 40.63).id, "south");
-  assert.equal(regionAt(meta, -73.7, 40.83).id, "north");
-  assert.equal(regionAt(meta, -74.0, 40.7), null);
+test("regionAt gives the region of the nearest gauge, and nothing outside the dataset", () => {
+  const meta = { bbox: [-74.27, 40.49, -73.42, 40.92], regions: [
+    { id: "HOGN6", at: [-73.6561, 40.6089] }, { id: "KPTN6", at: [-73.7657, 40.8113] }, { id: "BATN6", at: [-74.0142, 40.7006] } ] };
+  assert.equal(regionAt(meta, -73.63, 40.63).id, "HOGN6");       // Oceanside
+  assert.equal(regionAt(meta, -73.70, 40.83).id, "KPTN6");       // Port Washington
+  assert.equal(regionAt(meta, -74.00, 40.71).id, "BATN6");       // Lower Manhattan
+  assert.equal(regionAt(meta, -75.0, 40.7), null);
+  assert.equal(regionAt({ bbox: meta.bbox, regions: [] }, -74.0, 40.7), null);
 });
 
 const META = { bbox: [-73.745, 40.573, -73.572, 40.66], dem: { width: 3655, height: 2421 } };
