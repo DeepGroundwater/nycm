@@ -10,7 +10,8 @@ np = pytest.importorskip("numpy")
 pytest.importorskip("rasterio")
 pytest.importorskip("skimage")
 
-from pipelines.flood_elevation import OFFSET_M, SILL_STEP_M, connected_fill, encode_grid  # noqa: E402
+from pipelines.flood_elevation import (NEVER_CM, OFFSET_M, SEA_CM, SILL_STEP_M, connected_fill,  # noqa: E402
+                                        connected_fill_cm, encode_grid)
 
 
 def decode(rgb):
@@ -98,3 +99,30 @@ def test_sill_saturates_rather_than_wrapping():
     elev = np.array([[1.0]])
     rgb = encode_grid(elev, np.array([[False]]), elev + 40.0)
     assert rgb[0, 0, 2] == 255
+
+
+def test_bucket_flood_matches_the_morphological_fill_in_centimetres():
+    """The big-grid algorithm must give the same levels as the reference one."""
+    pytest.importorskip("numba")
+    rng = np.random.default_rng(11)
+    for _ in range(10):
+        cm = rng.integers(60, 500, size=(40, 50)).astype("int16")
+        sea = np.zeros(cm.shape, dtype=bool)
+        sea[:, 0] = True
+        sea[rng.integers(0, 40, 6), rng.integers(1, 50, 6)] = True
+        want = np.rint(connected_fill(cm / 100.0, sea) * 100).astype(int)
+        elev = cm.copy()
+        elev[sea] = SEA_CM
+        got = connected_fill_cm(elev, 700)
+        assert (got[sea] == SEA_CM).all()
+        assert (got[~sea] == want[~sea]).all()
+
+
+def test_bucket_flood_leaves_high_ground_and_sealed_hollows_alone():
+    pytest.importorskip("numba")
+    # sea | 1 m shore | 9 m ridge (above the cap) | 1 m hollow sealed behind it
+    elev = np.array([[SEA_CM, 100, 900, 100]] * 3, dtype="int16")
+    got = connected_fill_cm(elev, 700)
+    assert (got[:, 1] == 100).all()
+    assert (got[:, 2] == 900).all()            # above the cap: its own height
+    assert (got[:, 3] == NEVER_CM).all()       # the sea cannot get there below the cap

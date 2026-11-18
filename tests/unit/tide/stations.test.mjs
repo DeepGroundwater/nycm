@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { stationPredictor, subordinateExtremes, levelBetween, tideMllw } from "../../../js/tide.js";
 
 const here = new URL(".", import.meta.url);
-const doc = JSON.parse(readFileSync(new URL("../../../data/nassau-tides.json", here)));
+const doc = JSON.parse(readFileSync(new URL("../../../data/tide-stations.json", here)));
 // NOAA's own predictions for stations in the file — the ground truth.
 const noaa = JSON.parse(readFileSync(new URL("./noaa-nassau.json", here)));
 const byId = id => doc.stations.find(s => s.id === id);
